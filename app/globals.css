@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --command-navy: #0b1220;
+  --steel-blue: #1e4e8c;
+  --signal-cyan: #27d3ff;
+  --safety-red: #e5484d;
+  --warning-amber: #f59e0b;
+  --build-green: #2fbf71;
+  --concrete-gray: #e5e7eb;
+  --slate-text: #111827;
+  --muted-text: #6b7280;
+  --surface-card: #141e2e;
+  --surface-elevated: #1a2438;
+  --surface-border: rgba(229, 231, 235, 0.12);
+}
+
+@theme inline {
+  --color-command-navy: var(--command-navy);
+  --color-steel-blue: var(--steel-blue);
+  --color-signal-cyan: var(--signal-cyan);
+  --color-safety-red: var(--safety-red);
+  --color-warning-amber: var(--warning-amber);
+  --color-build-green: var(--build-green);
+  --color-concrete-gray: var(--concrete-gray);
+  --color-slate-text: var(--slate-text);
+  --color-muted-text: var(--muted-text);
+  --color-surface-card: var(--surface-card);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-border: var(--surface-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--command-navy);
+  color: #f1f5f9;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.font-data {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
