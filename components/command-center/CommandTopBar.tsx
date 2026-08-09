@@ -61,7 +61,12 @@ export function CommandTopBar({
             <StepForward className="h-3.5 w-3.5" aria-hidden />
             Process Next Observation
           </Button>
-          <Button variant="ghost" size="sm" onClick={onReset} title="Reset reasoning runtime">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onReset}
+            title="Reset reasoning and decision runtimes"
+          >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
             Reset
           </Button>

@@ -63,7 +63,9 @@ export function HealthStrip({
             {unresolvedActions}
           </p>
           <p className="font-data mt-1 text-xs text-muted-text">
-            Approval &amp; verification activate in a later phase
+            Decision workflow is active. Health &amp; Drift stay based on
+            operational reasoning; workflow verification does not yet score
+            recovery.
           </p>
         </div>
       </div>

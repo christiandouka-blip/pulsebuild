@@ -4,10 +4,14 @@ import Link from "next/link";
 import { ArrowLeft, GitBranch } from "lucide-react";
 
 import { PriorityBadge } from "@/components/cards/PriorityBadge";
+import { DecisionStatusBadge } from "@/components/command-center/DecisionStatusBadge";
+import { DecisionWorkflowControls } from "@/components/command-center/DecisionWorkflowControls";
 import { Badge } from "@/components/layout/Badge";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { Panel } from "@/components/layout/Panel";
+import { useDecisionStore } from "@/store/useDecisionStore";
 import { useReasoningStore } from "@/store/useReasoningStore";
+import { workflowStatusLabel } from "@/lib/selectors/decisionWorkflowSelectors";
 import { tierToNumber } from "@/lib/tier";
 
 type SignalDetailShellProps = {
@@ -16,6 +20,8 @@ type SignalDetailShellProps = {
 
 export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
   const reasoning = useReasoningStore((s) => s.getReasoningBySignalId(signalId));
+  const decisions = useDecisionStore((s) => s.bySignalId(signalId));
+  const decision = decisions[0] ?? null;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -99,7 +105,7 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
             </Panel>
 
             {reasoning.recommendation ? (
-              <Panel title="Recommendation" description="Generation only — approval deferred">
+              <Panel title="Recommendation" description="Immutable Phase 3A proposal">
                 <p className="text-sm font-medium text-slate-100">
                   {reasoning.recommendation.primaryAction}
                 </p>
@@ -134,13 +140,77 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
               </ul>
             </Panel>
 
-            <Panel title="Approval &amp; verification" description="Activate in a later phase">
-              <EmptyState
-                icon={GitBranch}
-                title="Approval and verification are deferred"
-                description="Phase 3A generates deterministic analysis and recommendations only. Human approval, execution, and verification activate in a later approved increment."
-                className="py-6"
-              />
+            <Panel
+              title="Decision workflow"
+              description="Superintendent review status and audit trail"
+            >
+              {!reasoning.recommendation ? (
+                <p className="text-sm text-muted-text">
+                  No recommendation was generated for this signal.
+                </p>
+              ) : !decision ? (
+                <EmptyState
+                  icon={GitBranch}
+                  title="Decision intake has not occurred"
+                  description="Return to the Command Center and process observations so Decision Review can open a workflow record for this recommendation."
+                  className="py-6"
+                />
+              ) : (
+                <div className="space-y-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DecisionStatusBadge state={decision.state} />
+                    {decision.approvalRequired ? (
+                      <Badge variant="tier2">Approval required</Badge>
+                    ) : (
+                      <Badge variant="muted">No approval required</Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-text">
+                    Workflow · {workflowStatusLabel(decision.state)}
+                  </p>
+                  {decision.selectedAction ? (
+                    <p className="text-slate-100">
+                      Selected action · {decision.selectedAction}
+                      {decision.selectedActionSource
+                        ? ` (${decision.selectedActionSource})`
+                        : ""}
+                    </p>
+                  ) : (
+                    <p className="text-muted-text">No action selected yet.</p>
+                  )}
+                  <div>
+                    <h3 className="text-xs font-medium uppercase tracking-wide text-muted-text">
+                      Audit trail
+                    </h3>
+                    {decision.auditTrail.length === 0 ? (
+                      <p className="mt-1 text-muted-text">No decision events recorded yet.</p>
+                    ) : (
+                      <ol className="mt-2 space-y-2">
+                        {decision.auditTrail.map((event) => (
+                          <li
+                            key={event.id}
+                            className="rounded-md border border-surface-border/70 bg-surface-card/30 px-2 py-2 text-xs text-muted-text"
+                          >
+                            <p className="text-slate-100">
+                              {event.command}: {event.fromState} → {event.toState}
+                            </p>
+                            <p>
+                              Actor · {event.actor} · {event.simulatedAt}
+                            </p>
+                            {event.reason ? <p>Reason · {event.reason}</p> : null}
+                            {event.notes ? <p>Notes · {event.notes}</p> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                  <DecisionWorkflowControls decision={decision} />
+                  <p className="text-xs text-muted-text">
+                    Execution and verification here are workflow confirmations only.
+                    Project data, operational issues, Health, and Drift are unchanged.
+                  </p>
+                </div>
+              )}
             </Panel>
           </>
         )}

@@ -4,9 +4,9 @@ import { useEffect } from "react";
 
 import { AgentChatPanelShell } from "@/components/chat/AgentChatPanelShell";
 import { CommandTopBar } from "@/components/command-center/CommandTopBar";
+import { DecisionReviewQueue } from "@/components/command-center/DecisionReviewQueue";
 import { HealthStrip } from "@/components/command-center/HealthStrip";
 import { LiveSignalFeedShell } from "@/components/command-center/LiveSignalFeedShell";
-import { RecommendationQueueShell } from "@/components/command-center/RecommendationQueueShell";
 import { TimelinePanelShell } from "@/components/timeline/TimelinePanelShell";
 import {
   formatSimulatedDateTime,
@@ -14,10 +14,16 @@ import {
   getProjectFactCounts,
 } from "@/lib/selectors/projectSelectors";
 import { countOpenTier1Issues } from "@/lib/selectors/reasoningSelectors";
+import { useDecisionStore } from "@/store/useDecisionStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useReasoningStore } from "@/store/useReasoningStore";
 import { useUIStore } from "@/store/useUIStore";
 
+/**
+ * Command Center orchestration.
+ * Coordinates reasoning process/reset with decision sync/reset without making
+ * the reasoning store aware of the decision store.
+ */
 export function CommandCenterShell() {
   const activeMobilePanel = useUIStore((state) => state.activeMobilePanel);
   const showChatExpanded = activeMobilePanel === "chat";
@@ -29,8 +35,14 @@ export function CommandCenterShell() {
   const initializeReasoning = useReasoningStore((state) => state.initializeReasoning);
   const runtime = useReasoningStore((state) => state.runtime);
   const canProcessNext = useReasoningStore((state) => state.canProcessNext);
-  const processNext = useReasoningStore((state) => state.processNextObservation);
+  const processNextObservation = useReasoningStore(
+    (state) => state.processNextObservation,
+  );
   const resetReasoning = useReasoningStore((state) => state.resetReasoning);
+
+  const decisionRuntime = useDecisionStore((state) => state.runtime);
+  const syncFromReasoning = useDecisionStore((state) => state.syncFromReasoning);
+  const resetDecisions = useDecisionStore((state) => state.resetDecisions);
 
   useEffect(() => {
     if (!isLoaded) loadSeedProject();
@@ -39,6 +51,17 @@ export function CommandCenterShell() {
   useEffect(() => {
     if (!isInitialized) initializeReasoning();
   }, [isInitialized, initializeReasoning]);
+
+  const handleProcessNext = () => {
+    processNextObservation();
+    const committed = useReasoningStore.getState().runtime;
+    syncFromReasoning(committed);
+  };
+
+  const handleReset = () => {
+    resetReasoning();
+    resetDecisions();
+  };
 
   const projectName = snapshot?.project.name ?? "—";
   const phaseName = snapshot ? getCurrentPhase(snapshot)?.name ?? "—" : "—";
@@ -57,10 +80,18 @@ export function CommandCenterShell() {
     />
   );
   const signalFeed = <LiveSignalFeedShell reasonings={runtime.reasonings} />;
-  const recommendationQueue = (
-    <RecommendationQueueShell reasonings={runtime.reasonings} />
+  const decisionReview = (
+    <DecisionReviewQueue
+      reasonings={runtime.reasonings}
+      decisionRuntime={decisionRuntime}
+    />
   );
-  const timeline = <TimelinePanelShell events={runtime.timeline} />;
+  const timeline = (
+    <TimelinePanelShell
+      events={runtime.timeline}
+      decisions={decisionRuntime.decisions}
+    />
+  );
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -70,8 +101,8 @@ export function CommandCenterShell() {
         dateLabel={dateLabel}
         timezone={timezone}
         canProcessNext={canProcessNext}
-        onProcessNext={processNext}
-        onReset={resetReasoning}
+        onProcessNext={handleProcessNext}
+        onReset={handleReset}
       />
 
       <div className="space-y-4 px-4 py-4 md:px-6 md:py-6">
@@ -79,8 +110,12 @@ export function CommandCenterShell() {
           <p>
             Deterministic reasoning is active. Use “Process Next Observation” to
             detect the next approved operational event; PulseBuild classifies
-            priority, predicts impact, and generates recommendations from project
-            data. Approval, execution, and verification activate in a later phase.
+            priority, predicts impact, and generates recommendations. In Decision
+            Review you can acknowledge, approve, or reject a recommendation, then
+            confirm field execution and record manual verification. Workflow
+            decisions are recorded as audit history only — they do not change
+            project data or resolve the underlying operational issue, and
+            operational recovery remains deferred.
           </p>
           {counts ? (
             <p className="mt-2 text-xs text-muted-text">
@@ -92,13 +127,12 @@ export function CommandCenterShell() {
           ) : null}
         </div>
 
-        {/* Mobile (<768px): operational priority stack */}
         <div className="space-y-4 md:hidden">
           {!showChatExpanded ? (
             <>
               {healthStrip}
               {signalFeed}
-              {recommendationQueue}
+              {decisionReview}
               {timeline}
             </>
           ) : (
@@ -106,21 +140,19 @@ export function CommandCenterShell() {
           )}
         </div>
 
-        {/* Tablet (768–1023px): stacked panels */}
         <div className="hidden space-y-4 md:block lg:hidden">
           {healthStrip}
           {signalFeed}
-          {recommendationQueue}
+          {decisionReview}
           <AgentChatPanelShell />
           {timeline}
         </div>
 
-        {/* Desktop (≥1024px): grid layout */}
         <div className="hidden space-y-4 lg:block">
           {healthStrip}
           <div className="grid gap-4 xl:grid-cols-12">
             <div className="xl:col-span-7">{signalFeed}</div>
-            <div className="xl:col-span-5">{recommendationQueue}</div>
+            <div className="xl:col-span-5">{decisionReview}</div>
           </div>
           <div className="grid gap-4 xl:grid-cols-12">
             <div className="xl:col-span-7">{timeline}</div>
