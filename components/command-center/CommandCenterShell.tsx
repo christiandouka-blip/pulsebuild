@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { AgentChatPanelShell } from "@/components/chat/AgentChatPanelShell";
 import { CommandTopBar } from "@/components/command-center/CommandTopBar";
@@ -53,6 +53,7 @@ export function CommandCenterShell() {
   const overlayRuntime = useOverlayStore((state) => state.runtime);
   const recoveryRuntime = useRecoveryStore((state) => state.runtime);
   const clock = useSimulatedClockStore((state) => state.clock);
+  const [chatComposerEpoch, setChatComposerEpoch] = useState(0);
 
   useEffect(() => {
     if (!isLoaded) loadSeedProject();
@@ -68,6 +69,7 @@ export function CommandCenterShell() {
 
   const handleReset = () => {
     resetCommandCenter();
+    setChatComposerEpoch((epoch) => epoch + 1);
   };
 
   const projectName = snapshot?.project.name ?? "—";
@@ -148,7 +150,7 @@ export function CommandCenterShell() {
               {timeline}
             </>
           ) : (
-            <AgentChatPanelShell forceExpanded />
+            <AgentChatPanelShell key={chatComposerEpoch} forceExpanded />
           )}
         </div>
 
@@ -156,7 +158,7 @@ export function CommandCenterShell() {
           {healthStrip}
           {signalFeed}
           {decisionReview}
-          <AgentChatPanelShell />
+          <AgentChatPanelShell key={chatComposerEpoch} />
           {timeline}
         </div>
 
@@ -169,7 +171,7 @@ export function CommandCenterShell() {
           <div className="grid gap-4 xl:grid-cols-12">
             <div className="xl:col-span-7">{timeline}</div>
             <div className="xl:col-span-5">
-              <AgentChatPanelShell />
+              <AgentChatPanelShell key={chatComposerEpoch} />
             </div>
           </div>
         </div>

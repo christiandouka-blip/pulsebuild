@@ -18,12 +18,15 @@ import {
   syncPhase3cRuntimes,
 } from "@/lib/orchestration/phase3cRuntime";
 import { useDecisionStore } from "@/store/useDecisionStore";
+import { useAgentStore } from "@/store/useAgentStore";
 import { useOverlayStore } from "@/store/useOverlayStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useReasoningStore } from "@/store/useReasoningStore";
 import { useRecoveryStore } from "@/store/useRecoveryStore";
 import { useSimulatedClockStore } from "@/store/useSimulatedClockStore";
 import { useUIStore } from "@/store/useUIStore";
+import { useVoiceStore } from "@/store/useVoiceStore";
+import { announceNewlyCommittedEvents, snapshotTimelineEventIds } from "@/lib/orchestration/voiceAnnouncements";
 
 export type ProcessNextResult =
   | { ok: true; simulatedAt: string }
@@ -76,11 +79,13 @@ export function processNextObservationCommitted(): ProcessNextResult {
   if (!instant) {
     return { ok: false, code: "NO_NEXT_OBSERVATION" };
   }
+  const previousTimelineIds = snapshotTimelineEventIds();
   useSimulatedClockStore.getState().commitStep();
   useReasoningStore.getState().processNextObservation();
   const committed = useReasoningStore.getState().runtime;
   useDecisionStore.getState().syncFromReasoning(committed);
   syncOperationalLayer(instant);
+  announceNewlyCommittedEvents(previousTimelineIds);
   return { ok: true, simulatedAt: instant };
 }
 
@@ -97,6 +102,9 @@ export function resetCommandCenter(): void {
     useSimulatedClockStore.getState().resetClock();
   }
   useUIStore.getState().closeSignal();
+  useAgentStore.getState().clearHistory();
+  useVoiceStore.getState().cancelSpeech();
+  useVoiceStore.getState().clearSession();
 }
 
 function commitDecisionAction(
@@ -113,10 +121,12 @@ function commitDecisionAction(
       },
     };
   }
+  const previousTimelineIds = snapshotTimelineEventIds();
   const result = run(instant);
   if (!result.ok) return result;
   useSimulatedClockStore.getState().commitStep();
   syncOperationalLayer(instant);
+  announceNewlyCommittedEvents(previousTimelineIds);
   return result;
 }
 
