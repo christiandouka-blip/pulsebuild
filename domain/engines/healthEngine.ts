@@ -4,6 +4,7 @@ import {
   HEALTH_MAX,
   HEALTH_MIN,
   HEALTH_PENALTY_BY_TIER,
+  HEALTH_PROVEN_RECOVERY_BONUS,
   HEALTH_UNRESOLVED_RECOMMENDATION_PENALTY,
   healthBand,
 } from "@/domain/constants/scoringConstants";
@@ -15,14 +16,20 @@ export type HealthInput = {
   openIssues: OperationalIssue[];
   affectedDownstreamTaskIds: TaskId[];
   unresolvedRecommendationCount: number;
+  /**
+   * Currently proven-resolved issue ids. Optional so Phase 3A callers omit it.
+   * Deduplicated by id. One currently recovered issue = one +5 bonus.
+   */
+  provenResolvedIssueIds?: readonly string[];
 };
 
 /**
  * Health Engine (SoT §10).
  *
  * Deterministic. Baseline 100 with no active issues. Every contribution is
- * explained in the breakdown. Verified-recovery bonus is deferred (3C) and is
- * always 0 in Phase 3A.
+ * explained in the breakdown. Phase 3C may supply provenResolvedIssueIds for
+ * the authorized +5 verified-operational-recovery bonus; omitted input keeps
+ * Phase 3A arithmetic unchanged.
  */
 export function computeHealth(input: HealthInput): HealthResult {
   const breakdown: ScoreBreakdownLine[] = [];
@@ -61,6 +68,15 @@ export function computeHealth(input: HealthInput): HealthResult {
     });
   }
 
+  for (const issueId of uniqueIds(input.provenResolvedIssueIds ?? [])) {
+    score += HEALTH_PROVEN_RECOVERY_BONUS;
+    breakdown.push({
+      label: `Verified operational recovery (${issueId})`,
+      delta: HEALTH_PROVEN_RECOVERY_BONUS,
+      sourceEntityIds: [issueId],
+    });
+  }
+
   score = clamp(score, HEALTH_MIN, HEALTH_MAX);
 
   const explanation =
@@ -69,6 +85,17 @@ export function computeHealth(input: HealthInput): HealthResult {
       : `Health reduced by ${breakdown.length} factor(s).`;
 
   return { score, band: healthBand(score), explanation, breakdown };
+}
+
+function uniqueIds(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const id of ids) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    unique.push(id);
+  }
+  return unique;
 }
 
 function clamp(value: number, min: number, max: number): number {

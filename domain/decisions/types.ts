@@ -5,6 +5,8 @@
  * verification are not independent status fields.
  */
 
+import type { RecommendationActionDescriptor } from "@/domain/types/recommendation";
+
 export type DecisionState =
   | "PendingReview"
   | "Acknowledged"
@@ -50,6 +52,12 @@ export type OperationalDecision = {
   /** Empty until Acknowledge or Approve records a selection. */
   selectedAction: string | null;
   selectedActionSource: SelectedActionSource | null;
+  /**
+   * Structured identity of the exact action selected — null until selection, or
+   * when the recommendation carried no descriptor. Removes any need to recover
+   * alternative identity from prose or array position.
+   */
+  selectedActionDescriptor: RecommendationActionDescriptor | null;
   mutatesOperationalState: boolean;
   approvalRequired: boolean;
   state: DecisionState;
@@ -65,6 +73,8 @@ export type OperationalDecision = {
 export type ProposalActionFact = {
   action: string;
   mutatesOperationalState: boolean;
+  /** Absent only for a descriptor-less legacy proposal. */
+  descriptor?: RecommendationActionDescriptor;
 };
 
 export type ProposalFacts = {

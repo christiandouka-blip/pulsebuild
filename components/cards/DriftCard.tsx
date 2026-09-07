@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 type DriftTone = "normal" | "warning" | "high" | "critical" | "neutral";
 
 type DriftCardProps = {
+  title?: string;
   score?: string;
   label?: string;
   tone?: DriftTone;
@@ -18,6 +19,7 @@ const toneClass: Record<DriftTone, string> = {
 };
 
 export function DriftCard({
+  title = "Drift Score",
   score = "—",
   label = "Normal",
   tone = "neutral",
@@ -31,7 +33,7 @@ export function DriftCard({
       )}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted-text">
-        Drift Score
+        {title}
       </p>
       <p className={cn("font-data mt-1 text-3xl font-semibold", toneClass[tone])}>
         {score}

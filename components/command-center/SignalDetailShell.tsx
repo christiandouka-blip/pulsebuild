@@ -10,8 +10,11 @@ import { Badge } from "@/components/layout/Badge";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { Panel } from "@/components/layout/Panel";
 import { useDecisionStore } from "@/store/useDecisionStore";
+import { useOverlayStore } from "@/store/useOverlayStore";
 import { useReasoningStore } from "@/store/useReasoningStore";
+import { useRecoveryStore } from "@/store/useRecoveryStore";
 import { workflowStatusLabel } from "@/lib/selectors/decisionWorkflowSelectors";
+import { signalRecoveryView } from "@/lib/selectors/recoveryPresentationSelectors";
 import { tierToNumber } from "@/lib/tier";
 
 type SignalDetailShellProps = {
@@ -22,6 +25,18 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
   const reasoning = useReasoningStore((s) => s.getReasoningBySignalId(signalId));
   const decisions = useDecisionStore((s) => s.bySignalId(signalId));
   const decision = decisions[0] ?? null;
+  const overlay = useOverlayStore((s) => s.runtime);
+  const recovery = useRecoveryStore((s) => s.runtime);
+
+  const recoveryView = reasoning?.issue
+    ? signalRecoveryView(
+        reasoning.issue.id,
+        recovery,
+        overlay?.effective ?? null,
+        reasoning.signal.relatedEntityType,
+        reasoning.signal.relatedEntityId,
+      )
+    : null;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -140,6 +155,79 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
               </ul>
             </Panel>
 
+            {reasoning.issue ? (
+              <Panel
+                title="Operational recovery"
+                description="Derived recovery truth. The Phase 3A issue record stays open."
+              >
+                <div className="space-y-2 text-sm">
+                  <p className="text-muted-text">
+                    Phase 3A issue status · {reasoning.issue.status}
+                    {recoveryView?.currentlyRecovered
+                      ? " · currently recovered in the effective world"
+                      : " · not currently recovered"}
+                  </p>
+                  {recoveryView ? (
+                    <>
+                      <p className="text-slate-100">
+                        Operational status · {recoveryView.currentOutcome}
+                        {recoveryView.verificationRuleId
+                          ? ` · ${recoveryView.verificationRuleId}`
+                          : ""}
+                      </p>
+                      {recoveryView.effectiveEntityFact ? (
+                        <p className="font-data text-xs text-muted-text">
+                          Effective fact · {recoveryView.effectiveEntityFact}
+                        </p>
+                      ) : null}
+                      {recoveryView.evidence.length > 0 ? (
+                        <ul className="space-y-1 text-xs text-muted-text" aria-label="Recovery evidence">
+                          {recoveryView.evidence.map((fact, i) => (
+                            <li key={`${fact.entityId}-${i}`}>
+                              <span className="font-data text-slate-200">
+                                {fact.entityType}:{fact.entityId}
+                              </span>{" "}
+                              — {fact.fact}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {recoveryView.history.length > 0 ? (
+                        <div>
+                          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-text">
+                            Recovery episode history
+                          </h3>
+                          <ol className="mt-2 space-y-2">
+                            {recoveryView.history.map((event) => (
+                              <li
+                                key={event.id}
+                                className="rounded-md border border-surface-border/70 bg-surface-card/30 px-2 py-2 text-xs text-muted-text"
+                              >
+                                <p className="text-slate-100">
+                                  {event.type} · episode {event.episodeNumber}
+                                </p>
+                                <p>
+                                  {event.verificationRuleId} · {event.simulatedAt}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-text">
+                          No proven operational recovery episodes for this issue.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-text">
+                      No operational verification has been computed for this issue yet.
+                    </p>
+                  )}
+                </div>
+              </Panel>
+            ) : null}
+
             <Panel
               title="Decision workflow"
               description="Superintendent review status and audit trail"
@@ -178,6 +266,18 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
                   ) : (
                     <p className="text-muted-text">No action selected yet.</p>
                   )}
+                  <div className="rounded-md border border-surface-border/70 bg-surface-card/30 px-2 py-2 text-xs text-muted-text">
+                    <p className="text-slate-100">Workflow verification</p>
+                    <p>
+                      Superintendent confirmed the action was carried out. This is a
+                      workflow status only.
+                    </p>
+                    <p className="mt-2 text-slate-100">Operational verification</p>
+                    <p>
+                      Effective project facts prove whether the blocker cleared. This
+                      status is independent of workflow verification.
+                    </p>
+                  </div>
                   <div>
                     <h3 className="text-xs font-medium uppercase tracking-wide text-muted-text">
                       Audit trail
@@ -205,10 +305,6 @@ export function SignalDetailShell({ signalId }: SignalDetailShellProps) {
                     )}
                   </div>
                   <DecisionWorkflowControls decision={decision} />
-                  <p className="text-xs text-muted-text">
-                    Execution and verification here are workflow confirmations only.
-                    Project data, operational issues, Health, and Drift are unchanged.
-                  </p>
                 </div>
               )}
             </Panel>

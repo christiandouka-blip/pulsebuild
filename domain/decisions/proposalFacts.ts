@@ -1,27 +1,43 @@
 /**
  * Derive ProposalFacts from an immutable RecommendationProposal.
  *
- * Does not clone evidence. Infers mutatesOperationalState deterministically
- * from action text to match Phase 3A candidate semantics (proposal type does
- * not currently expose a mutates flag).
+ * Does not clone evidence. Descriptor-first: when a structured action
+ * descriptor is present it is authoritative and is carried through unchanged.
+ * Prose inference remains only for a descriptor-less legacy proposal.
  */
 
-import type { ProposalFacts } from "@/domain/decisions/types";
-import type { RecommendationProposal } from "@/domain/types/recommendation";
+import type { ProposalActionFact, ProposalFacts } from "@/domain/decisions/types";
+import type {
+  RecommendationActionDescriptor,
+  RecommendationProposal,
+} from "@/domain/types/recommendation";
 
 export function buildProposalFacts(
   proposal: RecommendationProposal,
 ): ProposalFacts {
   return {
     approvalRequired: proposal.approval.required,
-    primaryAction: {
-      action: proposal.primaryAction,
-      mutatesOperationalState: inferMutatesOperationalState(proposal.primaryAction),
-    },
-    alternatives: proposal.alternatives.map((alt) => ({
-      action: alt.action,
-      mutatesOperationalState: inferMutatesOperationalState(alt.action),
-    })),
+    primaryAction: toActionFact(proposal.primaryAction, proposal.actionDescriptor),
+    alternatives: proposal.alternatives.map((alt) =>
+      toActionFact(alt.action, alt.actionDescriptor),
+    ),
+  };
+}
+
+function toActionFact(
+  action: string,
+  descriptor: RecommendationActionDescriptor | undefined,
+): ProposalActionFact {
+  if (descriptor) {
+    return {
+      action,
+      mutatesOperationalState: descriptor.mutatesOperationalState,
+      descriptor,
+    };
+  }
+  return {
+    action,
+    mutatesOperationalState: inferMutatesOperationalState(action),
   };
 }
 

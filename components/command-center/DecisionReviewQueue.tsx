@@ -28,7 +28,11 @@ import {
   workflowCounts,
   workflowStatusLabel,
 } from "@/lib/selectors/decisionWorkflowSelectors";
-import { useDecisionStore } from "@/store/useDecisionStore";
+import {
+  acknowledgeDecisionCommitted,
+  approveDecisionCommitted,
+  rejectDecisionCommitted,
+} from "@/lib/orchestration/commandCenter";
 
 type DecisionReviewQueueProps = {
   reasonings: SignalReasoning[];
@@ -93,10 +97,6 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
   const rejectReasonId = `${formId}-reject-reason`;
   const errorId = `${formId}-error`;
 
-  const approveDecision = useDecisionStore((s) => s.approveDecision);
-  const rejectDecision = useDecisionStore((s) => s.rejectDecision);
-  const acknowledgeDecision = useDecisionStore((s) => s.acknowledgeDecision);
-
   const [selection, setSelection] = useState<ActionSelection>({
     source: "primary",
   });
@@ -118,8 +118,7 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
       setError("Action no longer available: selected action could not be resolved.");
       return;
     }
-    const result = approveDecision(decision.id, {
-      simulatedAt: item.observedAtSimulated,
+    const result = approveDecisionCommitted(decision.id, {
       selectedActionSource: selection.source,
       alternativeIndex: selection.alternativeIndex,
     });
@@ -136,8 +135,7 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
       setError("Rejection reason required: enter a reason before rejecting.");
       return;
     }
-    const result = rejectDecision(decision.id, {
-      simulatedAt: item.observedAtSimulated,
+    const result = rejectDecisionCommitted(decision.id, {
       reason: rejectReason.trim(),
     });
     if (!result.ok) {
@@ -150,9 +148,7 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
 
   function onAcknowledge() {
     if (!decision) return;
-    const result = acknowledgeDecision(decision.id, {
-      simulatedAt: item.observedAtSimulated,
-    });
+    const result = acknowledgeDecisionCommitted(decision.id);
     if (!result.ok) {
       setError(formatDecisionError(result.error.code, result.error.message));
       return;
@@ -247,8 +243,9 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
           ) : null}
           {decision.state === "Verified" ? (
             <p>
-              Superintendent confirmed the recorded action. Operational resolution and
-              recovery scoring remain deferred.
+              Workflow verification: superintendent confirmed the action was carried
+              out. Operational verification is separate and uses effective project
+              facts to prove whether a blocker cleared.
             </p>
           ) : null}
         </div>

@@ -5,50 +5,43 @@ import { useId, useState } from "react";
 import { Button } from "@/components/layout/Button";
 import type { OperationalDecision } from "@/domain/decisions";
 import {
+  advanceToVerificationCommitted,
+  blockDecisionCommitted,
+  cancelDecisionCommitted,
+  executeDecisionCommitted,
+  failVerificationCommitted,
+  retryDecisionCommitted,
+  verifyDecisionCommitted,
+} from "@/lib/orchestration/commandCenter";
+import {
   formatWorkflowError,
   latestAuditEvent,
   workflowControlModel,
 } from "@/lib/selectors/decisionWorkflowSelectors";
-import {
-  useDecisionStore,
-  type DecisionActionResult,
-} from "@/store/useDecisionStore";
+import type { DecisionActionResult } from "@/store/useDecisionStore";
 
 type DecisionWorkflowControlsProps = {
   decision: OperationalDecision;
-  /** Simulated timestamp recorded on new audit events. */
-  simulatedAt?: string;
 };
 
 /**
  * Execution and verification surfaces for an approved decision.
  *
- * Phase 3B execution and verification are workflow confirmation only: nothing
- * here mutates ProjectSnapshot, task/crew/material state, or the linked
- * OperationalIssue.
+ * Workflow verification is superintendent confirmation. Operational
+ * verification is a separate Phase 3C proof against effective project facts.
  */
 export function DecisionWorkflowControls({
   decision,
-  simulatedAt,
 }: DecisionWorkflowControlsProps) {
   const baseId = useId();
   const blockReasonId = `${baseId}-block-reason`;
   const failReasonId = `${baseId}-fail-reason`;
-
-  const executeDecision = useDecisionStore((s) => s.executeDecision);
-  const blockDecision = useDecisionStore((s) => s.blockDecision);
-  const retryDecision = useDecisionStore((s) => s.retryDecision);
-  const cancelDecision = useDecisionStore((s) => s.cancelDecision);
-  const advanceToVerification = useDecisionStore((s) => s.advanceToVerification);
-  const verifyDecision = useDecisionStore((s) => s.verifyDecision);
-  const failVerification = useDecisionStore((s) => s.failVerification);
 
   const [blockReason, setBlockReason] = useState("");
   const [failReason, setFailReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const controls = workflowControlModel(decision);
-  const at = simulatedAt ?? decision.updatedAtSimulated;
 
   if (!controls.showExecutionPanel && !controls.showVerificationPanel) {
     return null;
@@ -91,9 +84,9 @@ export function DecisionWorkflowControls({
               <p className="text-sm text-slate-100">{decision.selectedAction}</p>
             ) : null}
             <p className="text-xs text-muted-text">
-              Operational action · Marking this executed records the superintendent
-              confirmation only. It does not change task, crew, material, inspection,
-              permit, or project data.
+              Workflow confirmation only. Mark Executed records that the superintendent
+              confirmed the field action. Operational verification uses effective
+              project facts separately and is not this status.
             </p>
             {approvedEvent ? (
               <p className="text-xs text-muted-text">
@@ -122,9 +115,7 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="primary"
                 size="sm"
-                onClick={() =>
-                  handle(() => executeDecision(decision.id, { simulatedAt: at }))
-                }
+                onClick={() => handle(() => executeDecisionCommitted(decision.id))}
                 title="Record that the approved field action was carried out"
               >
                 Mark Executed
@@ -137,9 +128,7 @@ export function DecisionWorkflowControls({
                 variant="secondary"
                 size="sm"
                 onClick={() =>
-                  handle(() =>
-                    advanceToVerification(decision.id, { simulatedAt: at }),
-                  )
+                  handle(() => advanceToVerificationCommitted(decision.id))
                 }
                 title="Send the recorded execution to manual verification"
               >
@@ -152,9 +141,7 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() =>
-                  handle(() => retryDecision(decision.id, { simulatedAt: at }))
-                }
+                onClick={() => handle(() => retryDecisionCommitted(decision.id))}
                 title="Return this decision to pending execution with the same approved action"
               >
                 Retry Execution
@@ -166,9 +153,7 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() =>
-                  handle(() => cancelDecision(decision.id, { simulatedAt: at }))
-                }
+                onClick={() => handle(() => cancelDecisionCommitted(decision.id))}
                 title="Cancel this approved decision without executing it"
               >
                 Cancel
@@ -203,8 +188,7 @@ export function DecisionWorkflowControls({
                 onClick={() =>
                   handle(
                     () =>
-                      blockDecision(decision.id, {
-                        simulatedAt: at,
+                      blockDecisionCommitted(decision.id, {
                         reason: blockReason.trim(),
                       }),
                     () => setBlockReason(""),
@@ -228,9 +212,9 @@ export function DecisionWorkflowControls({
               <p className="text-sm text-slate-100">{decision.selectedAction}</p>
             ) : null}
             <p className="text-xs text-muted-text">
-              Manual superintendent verification. Confirming records that the action
-              was completed as intended. It does not resolve the linked operational
-              issue, change project data, or adjust Health and Drift.
+              Workflow verification: superintendent confirmed the action was carried
+              out. Operational verification is separate: effective project facts must
+              prove the blocker cleared.
             </p>
             {executedEvent ? (
               <p className="text-xs text-muted-text">
@@ -256,9 +240,7 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="primary"
                 size="sm"
-                onClick={() =>
-                  handle(() => verifyDecision(decision.id, { simulatedAt: at }))
-                }
+                onClick={() => handle(() => verifyDecisionCommitted(decision.id))}
                 title="Confirm the recorded action was completed as intended"
               >
                 Verify
@@ -270,9 +252,7 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() =>
-                  handle(() => retryDecision(decision.id, { simulatedAt: at }))
-                }
+                onClick={() => handle(() => retryDecisionCommitted(decision.id))}
                 title="Return this decision to pending execution with the same approved action"
               >
                 Retry Execution
@@ -307,8 +287,7 @@ export function DecisionWorkflowControls({
                 onClick={() =>
                   handle(
                     () =>
-                      failVerification(decision.id, {
-                        simulatedAt: at,
+                      failVerificationCommitted(decision.id, {
                         reason: failReason.trim(),
                       }),
                     () => setFailReason(""),

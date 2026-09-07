@@ -11,6 +11,7 @@ import type {
 import type { ContextSnapshot } from "@/domain/types/context";
 import type {
   ApprovalRequirement,
+  RecommendationActionDescriptor,
   RecommendationAlternative,
   RecommendationProposal,
 } from "@/domain/types/recommendation";
@@ -43,7 +44,8 @@ type RecommendationCandidate = {
   primaryAction: string;
   rationale: string;
   expectedBenefit: string;
-  mutatesOperationalState: boolean;
+  /** Sole carrier of structured action identity, including the mutates flag. */
+  descriptor: RecommendationActionDescriptor;
   approval: ApprovalRequirement;
   evidence: ReasoningEvidence[];
 };
@@ -64,6 +66,7 @@ export function recommend(input: RecommendInput): RecommendationProposal | null 
     rationale: c.rationale,
     expectedBenefit: c.expectedBenefit,
     evidence: c.evidence,
+    actionDescriptor: c.descriptor,
   }));
 
   return {
@@ -75,6 +78,7 @@ export function recommend(input: RecommendInput): RecommendationProposal | null 
     expectedBenefit: primary.expectedBenefit,
     approval: primary.approval,
     alternatives,
+    actionDescriptor: primary.descriptor,
     confidence: priority.confidence,
     evidence: [
       {
@@ -157,7 +161,13 @@ function trySafetyProtect(input: RecommendInput): RecommendationCandidate | null
     rationale:
       "Safety-related conditions require human decision before any operational change.",
     expectedBenefit: `Protects ${taskId} from unsafe progressive work until a human decision is recorded.`,
-    mutatesOperationalState: true,
+    descriptor: {
+      ruleId: "REC_SAFETY_PROTECT",
+      mutatesOperationalState: true,
+      subjectEntityType: "task",
+      subjectEntityId: taskId,
+      originTaskId: taskId,
+    },
     approval: approvalRequired(
       "Safety-related operational intervention requires human approval.",
     ),
@@ -205,7 +215,13 @@ function tryInspectionCoordinate(
     rationale:
       "Dependent work cannot proceed while the required inspection remains incomplete.",
     expectedBenefit: `Protects ${taskId} from release until inspection ${inspection.id} is passed.`,
-    mutatesOperationalState: false,
+    descriptor: {
+      ruleId: "REC_INSPECTION_COORDINATE",
+      mutatesOperationalState: false,
+      subjectEntityType: "inspection",
+      subjectEntityId: inspection.id,
+      originTaskId: taskId,
+    },
     approval: approvalNotRequired(),
     evidence,
   };
@@ -244,7 +260,13 @@ function tryMaterialProtect(input: RecommendInput): RecommendationCandidate | nu
     rationale:
       "Material delay is confirmed for the affected task; releasing the task would ignore an unmet requirement.",
     expectedBenefit: `Maintains the current plan for ${taskId} while delivery timing for ${material.id} remains unconfirmed.`,
-    mutatesOperationalState: false,
+    descriptor: {
+      ruleId: "REC_MATERIAL_PROTECT",
+      mutatesOperationalState: false,
+      subjectEntityType: "material",
+      subjectEntityId: material.id,
+      originTaskId: taskId,
+    },
     approval: approvalNotRequired(),
     evidence,
   };
@@ -278,7 +300,13 @@ function tryMaterialEscalate(input: RecommendInput): RecommendationCandidate | n
     rationale:
       "The material requirement remains unsatisfied and continues to block the related task.",
     expectedBenefit: `Surfaces the unmet material requirement for ${material.id} without inventing a substitute delivery.`,
-    mutatesOperationalState: false,
+    descriptor: {
+      ruleId: "REC_MATERIAL_ESCALATE",
+      mutatesOperationalState: false,
+      subjectEntityType: "material",
+      subjectEntityId: material.id,
+      originTaskId: taskId,
+    },
     approval: approvalNotRequired(),
     evidence,
   };
@@ -357,7 +385,14 @@ function tryCrewReassign(input: RecommendInput): RecommendationCandidate | null 
     primaryAction: `Propose reassigning ${crewId} from blocked ${originTaskId} to ${alternateTaskId}. ${alternateTaskId} explicitly requires ${crewId} and its documented requirements and predecessors are satisfied.`,
     rationale: `${alternateTaskId} explicitly requires ${crewId} via Task.requiredCrewIds; ${crewId} is a verified idle risk on blocked ${originTaskId}.`,
     expectedBenefit: `May reduce verified idle exposure while supporting a task that explicitly requires ${crewId}.`,
-    mutatesOperationalState: true,
+    descriptor: {
+      ruleId: "REC_CREW_REASSIGN",
+      mutatesOperationalState: true,
+      subjectEntityType: "crew",
+      subjectEntityId: crewId,
+      originTaskId: originTaskId,
+      targetTaskId: alternateTaskId,
+    },
     approval: approvalRequired("Crew reassignment requires superintendent approval."),
     evidence,
   };
@@ -402,7 +437,6 @@ function tryTaskResequence(input: RecommendInput): RecommendationCandidate | nul
     },
   ];
 
-  const mutates = true;
   const approval =
     affectsCriticalPath || multiTask
       ? approvalRequired(
@@ -419,7 +453,14 @@ function tryTaskResequence(input: RecommendInput): RecommendationCandidate | nul
     rationale:
       "Dependency and requirement facts show a safe alternate task can proceed while the exposed task remains constrained.",
     expectedBenefit: `Protects continuity by advancing ${alternateTaskId} while ${taskId} remains exposed.`,
-    mutatesOperationalState: mutates,
+    descriptor: {
+      ruleId: "REC_TASK_RESEQUENCE",
+      mutatesOperationalState: true,
+      subjectEntityType: "task",
+      subjectEntityId: taskId,
+      originTaskId: taskId,
+      targetTaskId: alternateTaskId,
+    },
     approval,
     evidence,
   };
@@ -479,7 +520,13 @@ function buildMonitorCandidate(
     rationale:
       "No stronger operational action is fully supported by deterministic evidence, or the issue remains low-impact/monitoring-only.",
     expectedBenefit: `Maintains the current plan for ${taskId} while confirming evidence before any assignment or schedule mutation.`,
-    mutatesOperationalState: false,
+    descriptor: {
+      ruleId: "REC_MONITOR_PROTECT",
+      mutatesOperationalState: false,
+      subjectEntityType: "task",
+      subjectEntityId: taskId,
+      originTaskId: taskId,
+    },
     approval: approvalNotRequired(),
     evidence,
   };

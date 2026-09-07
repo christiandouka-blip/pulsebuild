@@ -65,7 +65,7 @@ export function CommandTopBar({
             variant="ghost"
             size="sm"
             onClick={onReset}
-            title="Reset reasoning and decision runtimes"
+            title="Reset reasoning, decisions, overlay, recovery, and workflow clock"
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
             Reset
@@ -74,8 +74,8 @@ export function CommandTopBar({
       </div>
       <p className="mt-3 text-xs text-muted-text">
         Manual observation playback for a controlled demonstration. Each activation
-        processes one approved scenario fixture in order. This is not production
-        simulation execution.
+        processes one approved scenario fixture in order and advances simulated
+        workflow time by 15 minutes. This is not production simulation execution.
       </p>
     </header>
   );

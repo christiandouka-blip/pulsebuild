@@ -28,6 +28,12 @@ export type {
 
 export { TERMINAL_DECISION_STATES } from "@/domain/decisions/types";
 
+/** Structured action identity re-exported for decision-side consumers. */
+export type {
+  RecommendationActionDescriptor,
+  RecommendationSubjectEntityType,
+} from "@/domain/types/recommendation";
+
 export {
   createOperationalDecision,
   transitionDecision,

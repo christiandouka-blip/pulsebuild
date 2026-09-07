@@ -93,8 +93,16 @@ export function getProjectFactCounts(snapshot: ProjectSnapshot) {
 }
 
 export function formatSimulatedDateTime(snapshot: ProjectSnapshot) {
+  return formatSimulatedInstant(
+    snapshot.project.currentSimulatedAt,
+    snapshot.project.timezone,
+  );
+}
+
+/** Format a known simulated ISO instant in the project timezone. Not wall-clock. */
+export function formatSimulatedInstant(iso: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: snapshot.project.timezone,
+    timeZone,
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -102,5 +110,5 @@ export function formatSimulatedDateTime(snapshot: ProjectSnapshot) {
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
-  }).format(new Date(snapshot.project.currentSimulatedAt));
+  }).format(new Date(iso));
 }

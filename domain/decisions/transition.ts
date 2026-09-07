@@ -43,6 +43,7 @@ export function createOperationalDecision(
     issueId: input.issueId,
     selectedAction: null,
     selectedActionSource: null,
+    selectedActionDescriptor: null,
     mutatesOperationalState: input.mutatesOperationalState,
     approvalRequired: input.approvalRequired,
     state: "PendingReview",
@@ -122,6 +123,7 @@ function acknowledge(
   return succeed(decision, command, "Acknowledged", {
     selectedAction: proposalFacts.primaryAction.action,
     selectedActionSource: "primary",
+    selectedActionDescriptor: proposalFacts.primaryAction.descriptor ?? null,
     mutatesOperationalState: proposalFacts.primaryAction.mutatesOperationalState,
   });
 }
@@ -149,6 +151,7 @@ function approve(
   return succeed(decision, command, "Approved", {
     selectedAction: selected.action.action,
     selectedActionSource: selected.source,
+    selectedActionDescriptor: selected.action.descriptor ?? null,
     mutatesOperationalState: selected.action.mutatesOperationalState,
   });
 }
@@ -305,7 +308,10 @@ function succeed(
   patch: Partial<
     Pick<
       OperationalDecision,
-      "selectedAction" | "selectedActionSource" | "mutatesOperationalState"
+      | "selectedAction"
+      | "selectedActionSource"
+      | "selectedActionDescriptor"
+      | "mutatesOperationalState"
     >
   > = {},
   reason: string | null = null,

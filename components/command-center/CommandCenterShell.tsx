@@ -9,20 +9,34 @@ import { HealthStrip } from "@/components/command-center/HealthStrip";
 import { LiveSignalFeedShell } from "@/components/command-center/LiveSignalFeedShell";
 import { TimelinePanelShell } from "@/components/timeline/TimelinePanelShell";
 import {
-  formatSimulatedDateTime,
+  formatSimulatedInstant,
   getCurrentPhase,
   getProjectFactCounts,
 } from "@/lib/selectors/projectSelectors";
-import { countOpenTier1Issues } from "@/lib/selectors/reasoningSelectors";
+import {
+  countEffectiveOpenTier1,
+  presentationScores,
+  recoverySummaryView,
+} from "@/lib/selectors/recoveryPresentationSelectors";
+import {
+  ensureCommandCenterInitialized,
+  processNextObservationCommitted,
+  resetCommandCenter,
+} from "@/lib/orchestration/commandCenter";
+import { currentSimulatedAt } from "@/lib/orchestration/simulatedClock";
 import { useDecisionStore } from "@/store/useDecisionStore";
+import { useOverlayStore } from "@/store/useOverlayStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useReasoningStore } from "@/store/useReasoningStore";
+import { useRecoveryStore } from "@/store/useRecoveryStore";
+import { useSimulatedClockStore } from "@/store/useSimulatedClockStore";
 import { useUIStore } from "@/store/useUIStore";
 
 /**
  * Command Center orchestration.
- * Coordinates reasoning process/reset with decision sync/reset without making
- * the reasoning store aware of the decision store.
+ * Coordinates reasoning, decisions, overlay, recovery, and the workflow clock
+ * through the application orchestration layer — stores do not import each other
+ * circularly.
  */
 export function CommandCenterShell() {
   const activeMobilePanel = useUIStore((state) => state.activeMobilePanel);
@@ -32,51 +46,48 @@ export function CommandCenterShell() {
   const loadSeedProject = useProjectStore((state) => state.loadSeedProject);
 
   const isInitialized = useReasoningStore((state) => state.isInitialized);
-  const initializeReasoning = useReasoningStore((state) => state.initializeReasoning);
   const runtime = useReasoningStore((state) => state.runtime);
   const canProcessNext = useReasoningStore((state) => state.canProcessNext);
-  const processNextObservation = useReasoningStore(
-    (state) => state.processNextObservation,
-  );
-  const resetReasoning = useReasoningStore((state) => state.resetReasoning);
 
   const decisionRuntime = useDecisionStore((state) => state.runtime);
-  const syncFromReasoning = useDecisionStore((state) => state.syncFromReasoning);
-  const resetDecisions = useDecisionStore((state) => state.resetDecisions);
+  const overlayRuntime = useOverlayStore((state) => state.runtime);
+  const recoveryRuntime = useRecoveryStore((state) => state.runtime);
+  const clock = useSimulatedClockStore((state) => state.clock);
 
   useEffect(() => {
     if (!isLoaded) loadSeedProject();
   }, [isLoaded, loadSeedProject]);
 
   useEffect(() => {
-    if (!isInitialized) initializeReasoning();
-  }, [isInitialized, initializeReasoning]);
+    if (isLoaded) ensureCommandCenterInitialized();
+  }, [isLoaded, isInitialized]);
 
   const handleProcessNext = () => {
-    processNextObservation();
-    const committed = useReasoningStore.getState().runtime;
-    syncFromReasoning(committed);
+    processNextObservationCommitted();
   };
 
   const handleReset = () => {
-    resetReasoning();
-    resetDecisions();
+    resetCommandCenter();
   };
 
   const projectName = snapshot?.project.name ?? "—";
   const phaseName = snapshot ? getCurrentPhase(snapshot)?.name ?? "—" : "—";
-  const dateLabel = snapshot ? formatSimulatedDateTime(snapshot) : "—";
   const timezone = snapshot?.project.timezone ?? "—";
+  const clockIso = clock ? currentSimulatedAt(clock) : snapshot?.project.currentSimulatedAt;
+  const dateLabel =
+    clockIso && timezone !== "—" ? formatSimulatedInstant(clockIso, timezone) : "—";
   const counts = snapshot ? getProjectFactCounts(snapshot) : null;
 
-  const tier1Count = countOpenTier1Issues(runtime.reasonings);
+  const { health, drift } = presentationScores(runtime, recoveryRuntime);
+  const recovery = recoverySummaryView(runtime, recoveryRuntime);
+  const tier1Count = countEffectiveOpenTier1(runtime, recoveryRuntime);
 
   const healthStrip = (
     <HealthStrip
-      health={runtime.health}
-      drift={runtime.drift}
+      health={health}
+      drift={drift}
       tier1Count={tier1Count}
-      unresolvedActions={0}
+      recovery={recovery}
     />
   );
   const signalFeed = <LiveSignalFeedShell reasonings={runtime.reasonings} />;
@@ -90,6 +101,8 @@ export function CommandCenterShell() {
     <TimelinePanelShell
       events={runtime.timeline}
       decisions={decisionRuntime.decisions}
+      overlay={overlayRuntime}
+      recovery={recoveryRuntime}
     />
   );
 
@@ -110,12 +123,11 @@ export function CommandCenterShell() {
           <p>
             Deterministic reasoning is active. Use “Process Next Observation” to
             detect the next approved operational event; PulseBuild classifies
-            priority, predicts impact, and generates recommendations. In Decision
-            Review you can acknowledge, approve, or reject a recommendation, then
-            confirm field execution and record manual verification. Workflow
-            decisions are recorded as audit history only — they do not change
-            project data or resolve the underlying operational issue, and
-            operational recovery remains deferred.
+            priority, predicts impact, and generates recommendations. Decision
+            Review records superintendent workflow. Overlay and recovery apply only
+            from structured effects and proven operational facts. Health and Drift
+            shown here are effective operational scores — a recovered blocker is
+            not the same as a recovered project.
           </p>
           {counts ? (
             <p className="mt-2 text-xs text-muted-text">

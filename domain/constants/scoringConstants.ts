@@ -26,6 +26,9 @@ export const HEALTH_AFFECTED_TASK_PENALTY = 2;
 /** SoT §10: unresolved recommendation subtracts 5 (PO Decision 3: one per open issue). */
 export const HEALTH_UNRESOLVED_RECOMMENDATION_PENALTY = 5;
 
+/** Phase 3C: +5 per currently proven-resolved operational issue. Subject to HEALTH_MAX. */
+export const HEALTH_PROVEN_RECOVERY_BONUS = 5;
+
 /** SoT §10 UI behavior: green 85-100, amber 65-84, red below 65. */
 export function healthBand(score: number): HealthBand {
   if (score >= 85) return "green";

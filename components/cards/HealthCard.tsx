@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 type HealthTone = "green" | "amber" | "red" | "neutral";
 
 type HealthCardProps = {
+  title?: string;
   score?: string;
   stateLabel?: string;
   tone?: HealthTone;
@@ -17,6 +18,7 @@ const toneClass: Record<HealthTone, string> = {
 };
 
 export function HealthCard({
+  title = "Health Score",
   score = "—",
   stateLabel = "Awaiting signals",
   tone = "neutral",
@@ -30,7 +32,7 @@ export function HealthCard({
       )}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-muted-text">
-        Health Score
+        {title}
       </p>
       <p className={cn("font-data mt-1 text-3xl font-semibold", toneClass[tone])}>
         {score}
