@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { SignOutButton } from "@/components/auth/SignOutButton";
 import { WorkspaceFailureView } from "@/components/workspace/WorkspaceFailureView";
 import { toAuthPortIdentity } from "@/lib/auth/authPort";
 import { auth } from "@/lib/auth/nextAuth";
@@ -49,10 +50,15 @@ export default async function ProjectsPage() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
-      <p className="text-xs font-medium uppercase tracking-[0.2em] text-signal-cyan">
-        Workspace
-      </p>
-      <h1 className="mt-2 text-2xl font-semibold">Projects</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-signal-cyan">
+            Workspace
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold">Projects</h1>
+        </div>
+        <SignOutButton />
+      </div>
       <p className="mt-2 text-sm text-muted-text">
         Select a project you are authorized to open. The Command Center loads
         only the PostgreSQL snapshot for this organization.

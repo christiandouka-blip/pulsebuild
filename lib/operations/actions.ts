@@ -15,11 +15,47 @@ import { readRequestedOrganizationId } from "@/lib/auth/server";
 import { isProductionRuntime } from "@/lib/auth/runtimeMode";
 import { createServerClock } from "@/lib/import/clock";
 import { createProductionWorkspacePorts } from "@/lib/workspace/productionPorts";
+import { logPilotEvent } from "@/lib/diagnostics/log";
 
 export type ProductionCommitActionResult = OperationalCommandResult;
 
 function unavailable(): OperationalCommandResult {
+  logPilotEvent({ area: "operations", outcome: "unavailable", status: "DatabaseUnavailable" });
   return { status: "DatabaseUnavailable" };
+}
+
+const QUIET_OPERATIONAL_STATUSES = new Set<OperationalCommandResult["status"]>([
+  "Committed",
+  "AlreadyCommitted",
+  "Unauthenticated",
+  "UnknownIdentity",
+  "NotOrganizationMember",
+  "InvalidActiveOrganization",
+  "ActiveOrganizationRequired",
+  "ProjectNotFound",
+  "ProjectAccessDenied",
+  "CapabilityDenied",
+  "InvalidObservation",
+  "InvalidTransition",
+]);
+
+function logCommitFailure(status: OperationalCommandResult["status"]) {
+  if (QUIET_OPERATIONAL_STATUSES.has(status)) {
+    return;
+  }
+  const outcome =
+    status === "ReconstructionFailure"
+      ? "reconstruction_failed"
+      : status === "PersistenceConflict"
+        ? "persist_conflict"
+        : status === "DatabaseUnavailable"
+          ? "unavailable"
+          : "commit_failed";
+  logPilotEvent({
+    area: "operations",
+    outcome,
+    status,
+  });
 }
 
 export async function commitProductionObservationAction(input: {
@@ -33,7 +69,7 @@ export async function commitProductionObservationAction(input: {
   const identity = toAuthPortIdentity(session);
   const ports = createProductionWorkspacePorts();
   if (ports.status !== "ready") return unavailable();
-  return commitProductionObservation({
+  const result = await commitProductionObservation({
     identity,
     requestedOrganizationId: await readRequestedOrganizationId(),
     projectId: input.projectId,
@@ -43,6 +79,8 @@ export async function commitProductionObservationAction(input: {
     store: ports.operationalStore,
     clock: createServerClock(),
   });
+  logCommitFailure(result.status);
+  return result;
 }
 
 export async function commitProductionDecisionAction(input: {
@@ -56,7 +94,7 @@ export async function commitProductionDecisionAction(input: {
   const identity = toAuthPortIdentity(session);
   const ports = createProductionWorkspacePorts();
   if (ports.status !== "ready") return unavailable();
-  return commitProductionDecision({
+  const result = await commitProductionDecision({
     identity,
     requestedOrganizationId: await readRequestedOrganizationId(),
     projectId: input.projectId,
@@ -66,4 +104,6 @@ export async function commitProductionDecisionAction(input: {
     store: ports.operationalStore,
     clock: createServerClock(),
   });
+  logCommitFailure(result.status);
+  return result;
 }

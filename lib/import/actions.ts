@@ -16,6 +16,7 @@ import {
 import { authorizeCurrentUserToCreateProject } from "@/lib/auth/server";
 import { isProductionRuntime } from "@/lib/auth/runtimeMode";
 import { getDb } from "@/lib/db/client";
+import { logPilotEvent } from "@/lib/diagnostics/log";
 
 export type ImportActionState = { error: string } | void;
 
@@ -64,6 +65,7 @@ export async function createProjectImportAction(
     return { error: "You are not allowed to create a project." };
   }
   if (result.status === "rejected") {
+    logPilotEvent({ area: "import", outcome: "rejected" });
     return {
       error: result.issues[0]?.message ?? "The file could not be imported.",
     };
@@ -110,15 +112,18 @@ export async function confirmProjectImportAction(
     return { error: "You are not allowed to import a project." };
   }
   if (result.status === "not_found") {
+    logPilotEvent({ area: "import", outcome: "not_found" });
     return { error: "Import was not found." };
   }
   if (result.status === "rejected") {
+    logPilotEvent({ area: "import", outcome: "rejected" });
     return {
       error: result.issues.find((item) => item.severity === "Error")?.message ??
         "Import confirmation was rejected.",
     };
   }
   if (result.status === "rolled_back") {
+    logPilotEvent({ area: "import", outcome: "rolled_back" });
     return { error: result.message };
   }
   redirect(`/projects/import/${importId}?imported=1`);

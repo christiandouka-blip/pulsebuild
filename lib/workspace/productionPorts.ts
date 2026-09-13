@@ -7,6 +7,7 @@ import { selectProjectRepository } from "@/lib/repositories/selectProjectReposit
 import type { IdentityDirectory } from "@/lib/auth/identityDirectory";
 import type { ProjectRepository } from "@/lib/repositories/types";
 import type { ProjectCatalog } from "@/lib/workspace/types";
+import { logPilotEvent } from "@/lib/diagnostics/log";
 
 export type ProductionWorkspacePorts =
   | {
@@ -33,6 +34,7 @@ export function createProductionWorkspacePorts(): ProductionWorkspacePorts {
       operationalStore: createPostgresOperationalStore(db),
     };
   } catch {
+    logPilotEvent({ area: "database", outcome: "unavailable" });
     return { status: "DatabaseUnavailable" };
   }
 }

@@ -1,6 +1,7 @@
 import type { EnvRecord } from "@/lib/auth/runtimeMode";
 
 export const ACTIVE_ORGANIZATION_COOKIE = "pulsebuild.active_organization";
+export const SIGN_OUT_REDIRECT_PATH = "/sign-in";
 
 export function activeOrganizationCookieOptions(secure: boolean) {
   return {
@@ -8,6 +9,17 @@ export function activeOrganizationCookieOptions(secure: boolean) {
     sameSite: "lax" as const,
     secure,
     path: "/",
+  };
+}
+
+export function clearedActiveOrganizationCookie(secure: boolean) {
+  return {
+    name: ACTIVE_ORGANIZATION_COOKIE,
+    value: "",
+    options: {
+      ...activeOrganizationCookieOptions(secure),
+      maxAge: 0,
+    },
   };
 }
 

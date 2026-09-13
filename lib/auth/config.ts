@@ -1,18 +1,17 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import type { NextAuthConfig } from "next-auth";
-import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
-
 import {
   authAccounts,
   authSessions,
   authVerificationTokens,
   users,
 } from "@/drizzle/schema";
-import { requireProductionAuthConfig } from "@/lib/auth/env";
-import { createMagicLinkProvider } from "@/lib/auth/magicLinkProvider";
+import { requireProductionAuthConfig, type ProductionAuthConfig } from "@/lib/auth/env";
+import { createAuthProviders } from "@/lib/auth/providers";
 import { shouldUseSecureCookies } from "@/lib/auth/cookies";
 import { isProductionRuntime, type EnvRecord } from "@/lib/auth/runtimeMode";
 import { getDb } from "@/lib/db/client";
+import { logPilotEvent } from "@/lib/diagnostics/log";
 
 const DEMO_AUTH_SECRET = "pulsebuild-demo-auth-secret-not-for-production";
 
@@ -20,9 +19,15 @@ export function createAuthConfig(
   env: EnvRecord = process.env,
 ): NextAuthConfig {
   const production = isProductionRuntime(env);
-  const productionConfig = production
-    ? requireProductionAuthConfig(env)
-    : null;
+  let productionConfig: ProductionAuthConfig | null = null;
+  if (production) {
+    try {
+      productionConfig = requireProductionAuthConfig(env);
+    } catch (error) {
+      logPilotEvent({ area: "auth", outcome: "missing_configuration" });
+      throw error;
+    }
+  }
   const secureCookies = shouldUseSecureCookies(env);
 
   return {
@@ -40,20 +45,18 @@ export function createAuthConfig(
           verificationTokensTable: authVerificationTokens,
         })
       : undefined,
-    providers: [
-      MicrosoftEntraID({
-        clientId:
-          productionConfig?.entraClientId ??
-          env.AUTH_MICROSOFT_ENTRA_ID_ID ??
-          "demo-entra-id-not-configured",
-        clientSecret:
-          productionConfig?.entraClientSecret ??
-          env.AUTH_MICROSOFT_ENTRA_ID_SECRET ??
-          "demo-entra-secret-not-configured",
-        issuer: productionConfig?.entraIssuer ?? env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
-      }),
-      createMagicLinkProvider(),
-    ],
+    providers: createAuthProviders({
+      production,
+      entraClientId:
+        productionConfig?.entraClientId ??
+        env.AUTH_MICROSOFT_ENTRA_ID_ID ??
+        "demo-entra-id-not-configured",
+      entraClientSecret:
+        productionConfig?.entraClientSecret ??
+        env.AUTH_MICROSOFT_ENTRA_ID_SECRET ??
+        "demo-entra-secret-not-configured",
+      entraIssuer: productionConfig?.entraIssuer ?? env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+    }),
     pages: {
       signIn: "/sign-in",
     },

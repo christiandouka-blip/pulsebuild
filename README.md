@@ -10,7 +10,11 @@ Operational truth comes from deterministic reasoning, not AI. Recommendations ar
 
 ## Current Status
 
-**Phase 3A is complete.**
+**Phase 5G is complete** (production persistence and live PostgreSQL readiness).
+
+Phase 5H.1 prepares hosted staging identity and environment readiness in the repository. It does not deploy.
+
+Pilot project import maximum is **4 MB** so the file plus multipart overhead stays under Vercel’s 4.5 MB Function request ceiling. See [docs/staging-environment.md](docs/staging-environment.md) for the staging contract (variable **names** only).
 
 ### Implemented
 

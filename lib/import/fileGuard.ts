@@ -1,7 +1,8 @@
 import { issue } from "@/domain/import/issues";
 import type { ImportFileType, ImportIssue } from "@/domain/import/types";
 
-export const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_IMPORT_FILE_BYTES = 4 * 1024 * 1024;
+export const MAX_IMPORT_FILE_LABEL = "4 MB";
 export const MAX_IMPORT_ROWS = 5000;
 export const MAX_IMPORT_SHEETS = 16;
 
@@ -99,7 +100,7 @@ export function guardImportFile(input: {
       issue({
         code: "file.too_large",
         entityType: "file",
-        message: `Files larger than ${MAX_IMPORT_FILE_BYTES} bytes are rejected.`,
+        message: `Files larger than ${MAX_IMPORT_FILE_LABEL} are rejected.`,
       }),
     );
     return { ok: false, issues };

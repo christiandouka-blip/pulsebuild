@@ -4,7 +4,7 @@ import { MAX_IMPORT_ROWS, MAX_IMPORT_SHEETS } from "@/lib/import/fileGuard";
 import type { SheetMatrix } from "@/lib/import/parseCsv";
 import { readStoredXlsx } from "@/lib/import/xlsxIo";
 
-/** Declared uncompressed ZIP entry cap. Tightens the 5 MB upload bound. */
+/** Declared uncompressed ZIP entry cap. Independent of the upload file maximum. */
 export const MAX_XLSX_ENTRY_UNCOMPRESSED = 16 * 1024 * 1024;
 /** Declared uncompressed ZIP archive cap. */
 export const MAX_XLSX_TOTAL_UNCOMPRESSED = 32 * 1024 * 1024;

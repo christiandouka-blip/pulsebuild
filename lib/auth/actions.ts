@@ -6,9 +6,12 @@ import { redirect } from "next/navigation";
 import { isAuthorized } from "@/domain/authorization/types";
 import { toAuthPortIdentity } from "@/lib/auth/authPort";
 import { authorizeOrganizationContext } from "@/lib/auth/authorize";
+import { resolveSafeCallbackUrl } from "@/lib/auth/callbackUrl";
 import {
   ACTIVE_ORGANIZATION_COOKIE,
+  SIGN_OUT_REDIRECT_PATH,
   activeOrganizationCookieOptions,
+  clearedActiveOrganizationCookie,
   shouldUseSecureCookies,
 } from "@/lib/auth/cookies";
 import { MagicLinkTransportNotConfiguredError } from "@/lib/auth/magicLink";
@@ -17,8 +20,9 @@ import { isProductionRuntime } from "@/lib/auth/runtimeMode";
 import { getDb } from "@/lib/db/client";
 import { createDrizzleIdentityDirectory } from "@/lib/db/identityDirectory";
 
-export async function signInWithEntraAction() {
-  await signIn("microsoft-entra-id", { redirectTo: "/" });
+export async function signInWithEntraAction(formData?: FormData) {
+  const redirectTo = resolveSafeCallbackUrl(formData?.get("callbackUrl"));
+  await signIn("microsoft-entra-id", { redirectTo });
 }
 
 export async function signInWithMagicLinkAction(
@@ -29,7 +33,10 @@ export async function signInWithMagicLinkAction(
     return { error: "Email is required." };
   }
   try {
-    await signIn("email", { email, redirectTo: "/" });
+    await signIn("email", {
+      email,
+      redirectTo: resolveSafeCallbackUrl(formData.get("callbackUrl")),
+    });
   } catch (error) {
     if (error instanceof MagicLinkTransportNotConfiguredError) {
       return {
@@ -42,7 +49,10 @@ export async function signInWithMagicLinkAction(
 }
 
 export async function signOutAction() {
-  await signOut({ redirectTo: "/sign-in" });
+  const jar = await cookies();
+  const cleared = clearedActiveOrganizationCookie(shouldUseSecureCookies());
+  jar.set(cleared.name, cleared.value, cleared.options);
+  await signOut({ redirectTo: SIGN_OUT_REDIRECT_PATH });
 }
 
 export async function selectOrganizationAction(formData: FormData) {

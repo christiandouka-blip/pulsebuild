@@ -1,6 +1,7 @@
 import { RotateCcw, StepForward } from "lucide-react";
 import Link from "next/link";
 
+import { SignOutButton } from "@/components/auth/SignOutButton";
 import { Badge } from "@/components/layout/Badge";
 import { Button } from "@/components/layout/Button";
 
@@ -73,6 +74,7 @@ export function CommandTopBar({
             <RotateCcw className="h-3.5 w-3.5" aria-hidden />
             Reset
           </Button>
+          {workspaceMode ? <SignOutButton /> : null}
         </div>
       </div>
       {!workspaceMode ? (

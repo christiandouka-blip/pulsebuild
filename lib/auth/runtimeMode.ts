@@ -1,7 +1,9 @@
 /**
  * Explicit demo vs production runtime. Unset local/test defaults to demo.
- * Hosted production (Vercel production) fails closed unless mode is set.
+ * Hosted Vercel production and preview fail closed unless mode is production.
+ * Explicit demo is rejected on those hosted customer origins at request time.
  * Never treat a missing database as "allow everything".
+ * Explicit PULSEBUILD_RUNTIME_MODE=production always wins over VITEST.
  */
 
 export const RUNTIME_MODES = ["demo", "production"] as const;
@@ -17,6 +19,16 @@ const BUILD_PHASES = new Set([
 
 export function getRuntimeMode(env: EnvRecord = process.env): RuntimeMode {
   const explicit = env.PULSEBUILD_RUNTIME_MODE?.trim();
+  const hostedCustomer =
+    env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview";
+  const building = BUILD_PHASES.has(env.NEXT_PHASE ?? "");
+
+  if (explicit === "demo" && hostedCustomer && !building) {
+    throw new Error(
+      "PULSEBUILD_RUNTIME_MODE=demo is not allowed on hosted Vercel production or preview.",
+    );
+  }
+
   if (explicit === "production" || explicit === "demo") {
     return explicit;
   }
@@ -30,13 +42,13 @@ export function getRuntimeMode(env: EnvRecord = process.env): RuntimeMode {
     return "demo";
   }
 
-  if (BUILD_PHASES.has(env.NEXT_PHASE ?? "")) {
+  if (building) {
     return "demo";
   }
 
-  if (env.VERCEL_ENV === "production") {
+  if (hostedCustomer) {
     throw new Error(
-      'PULSEBUILD_RUNTIME_MODE is required in hosted production. Set it to "production".',
+      'PULSEBUILD_RUNTIME_MODE is required on hosted Vercel production and preview. Set it to "production".',
     );
   }
 
