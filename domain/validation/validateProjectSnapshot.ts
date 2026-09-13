@@ -1,5 +1,4 @@
 import type { ProjectSnapshot } from "@/domain/types/snapshot";
-import type { SignalType } from "@/domain/types/signal";
 import type { TaskState } from "@/domain/types/task";
 
 const CANONICAL_TASK_STATES: TaskState[] = [
@@ -17,27 +16,15 @@ const CANONICAL_TASK_STATES: TaskState[] = [
 /** Seeded terminal-complete states used only for baseline prerequisite validation. */
 const COMPLETE_TASK_STATES: TaskState[] = ["Completed", "Verified", "Closed"];
 
-const APPROVED_FIXTURE_IDS = new Set([
-  "fixture-weather-alert",
-  "fixture-material-delay",
-  "fixture-inspection-missing",
-  "fixture-delivery-received",
-  "fixture-task-complete",
-]);
-
-const APPROVED_FIXTURE_SIGNAL_TYPES: Record<string, SignalType> = {
-  "fixture-weather-alert": "WeatherAlert",
-  "fixture-material-delay": "MaterialDeliveryDelayed",
-  "fixture-inspection-missing": "InspectionMissing",
-  "fixture-delivery-received": "DeliveryReceived",
-  "fixture-task-complete": "TaskComplete",
-};
-
 export type ValidationResult = {
   ok: boolean;
   errors: string[];
 };
 
+/**
+ * Generic construction-domain integrity for any legitimate PulseBuild project.
+ * Harbor Point demo invariants live in validateHarborPointSeedSnapshot.
+ */
 export function validateProjectSnapshot(
   snapshot: ProjectSnapshot,
 ): ValidationResult {
@@ -48,7 +35,7 @@ export function validateProjectSnapshot(
   const materialIds = new Set(snapshot.materials.map((m) => m.id));
   const equipmentIds = new Set(snapshot.equipment.map((e) => e.id));
   const evidenceIds = new Set(snapshot.evidence.map((e) => e.id));
-  const phaseIds = new Set(snapshot.phases.map((p) => p.id));
+  const projectId = snapshot.project.id;
 
   const allIds: string[] = [
     snapshot.project.id,
@@ -74,50 +61,86 @@ export function validateProjectSnapshot(
     }
   }
 
-  if (snapshot.project.currentPhaseId !== undefined) {
-    if (!phaseIds.has(snapshot.project.currentPhaseId)) {
+  if (!isValidIanaTimeZone(snapshot.project.timezone)) {
+    errors.push(
+      `Project timezone is not a valid IANA time zone: ${snapshot.project.timezone}`,
+    );
+  }
+
+  requireParseableInstant(
+    "Project currentSimulatedAt",
+    snapshot.project.currentSimulatedAt,
+    errors,
+  );
+  requireChronology(
+    "Project",
+    snapshot.project.startDate,
+    snapshot.project.targetDate,
+    errors,
+  );
+
+  const currentPhase = snapshot.phases.find(
+    (phase) => phase.id === snapshot.project.currentPhaseId,
+  );
+  if (!currentPhase) {
+    errors.push(
+      `Project currentPhaseId ${snapshot.project.currentPhaseId} not found`,
+    );
+  } else if (currentPhase.projectId !== projectId) {
+    errors.push(
+      `Project currentPhaseId ${snapshot.project.currentPhaseId} belongs to a different project`,
+    );
+  }
+
+  for (const phase of snapshot.phases) {
+    if (phase.projectId !== projectId) {
       errors.push(
-        `Project currentPhaseId ${snapshot.project.currentPhaseId} not found`,
+        `Phase ${phase.id} projectId ${phase.projectId} does not match project ${projectId}`,
       );
     }
-  }
-
-  if (snapshot.project.currentSimulatedAt !== "2026-03-14T06:30:00-04:00") {
-    errors.push(
-      `Project currentSimulatedAt must be 2026-03-14T06:30:00-04:00, got ${snapshot.project.currentSimulatedAt}`,
-    );
-  }
-
-  const criticalPathCount = snapshot.tasks.filter((t) => t.isCriticalPath).length;
-  if (criticalPathCount < 3) {
-    errors.push(
-      `At least three critical-path tasks required, found ${criticalPathCount}`,
-    );
-  }
-
-  const pourTask = snapshot.tasks.find((t) => t.id === "task-pour-level-1-slab");
-  if (!pourTask || pourTask.status !== "Ready") {
-    errors.push("task-pour-level-1-slab must exist with status Ready");
-  }
-
-  const slabInspection = snapshot.inspections.find(
-    (i) => i.id === "insp-slab-pre-pour",
-  );
-  if (
-    !slabInspection ||
-    slabInspection.scheduledTime !== "2026-03-14T07:00:00-04:00"
-  ) {
-    errors.push(
-      "insp-slab-pre-pour must be scheduled for 2026-03-14T07:00:00-04:00",
-    );
+    requireChronology(`Phase ${phase.id}`, phase.plannedStart, phase.plannedEnd, errors);
   }
 
   for (const task of snapshot.tasks) {
-    if (!phaseIds.has(task.phaseId)) {
+    if (task.projectId !== projectId) {
+      errors.push(
+        `Task ${task.id} projectId ${task.projectId} does not match project ${projectId}`,
+      );
+    }
+    const phase = snapshot.phases.find((item) => item.id === task.phaseId);
+    if (!phase) {
       errors.push(`Task ${task.id} references invalid phase ${task.phaseId}`);
+    } else if (phase.projectId !== projectId) {
+      errors.push(
+        `Task ${task.id} phase ${task.phaseId} belongs to a different project`,
+      );
     }
     if (!CANONICAL_TASK_STATES.includes(task.status)) {
       errors.push(`Task ${task.id} has non-canonical status ${task.status}`);
+    }
+    requireChronology(`Task ${task.id} planned`, task.plannedStart, task.plannedEnd, errors);
+    if (task.actualStart !== undefined && task.actualEnd !== undefined) {
+      requireChronology(
+        `Task ${task.id} actual`,
+        task.actualStart,
+        task.actualEnd,
+        errors,
+      );
+    } else {
+      if (task.actualStart !== undefined) {
+        requireParseableInstant(
+          `Task ${task.id} actualStart`,
+          task.actualStart,
+          errors,
+        );
+      }
+      if (task.actualEnd !== undefined) {
+        requireParseableInstant(
+          `Task ${task.id} actualEnd`,
+          task.actualEnd,
+          errors,
+        );
+      }
     }
     for (const depId of task.dependencyTaskIds) {
       if (!taskIds.has(depId)) {
@@ -152,10 +175,8 @@ export function validateProjectSnapshot(
     errors.push("Task dependency graph contains a cycle");
   }
 
-  // Baseline prerequisite rule: a task seeded as Ready must not have an
-  // incomplete predecessor at the canonical starting state. This inspects
-  // seeded task states only — it is NOT a Dependency Engine and performs no
-  // dynamic transition calculation.
+  // Snapshot starting-state integrity: Ready must not have an incomplete
+  // predecessor. Not a Dependency Engine and performs no dynamic transition.
   const taskStatusById = new Map(
     snapshot.tasks.map((t) => [t.id, t.status]),
   );
@@ -188,12 +209,26 @@ export function validateProjectSnapshot(
         `Equipment ${equipment.id} assignedTaskId ${equipment.assignedTaskId} not found`,
       );
     }
+    if (equipment.availableFrom !== undefined) {
+      requireParseableInstant(
+        `Equipment ${equipment.id} availableFrom`,
+        equipment.availableFrom,
+        errors,
+      );
+    }
   }
 
   for (const inspection of snapshot.inspections) {
     if (!taskIds.has(inspection.requiredBeforeTaskId)) {
       errors.push(
         `Inspection ${inspection.id} requiredBeforeTaskId ${inspection.requiredBeforeTaskId} not found`,
+      );
+    }
+    if (inspection.scheduledTime !== undefined) {
+      requireParseableInstant(
+        `Inspection ${inspection.id} scheduledTime`,
+        inspection.scheduledTime,
+        errors,
       );
     }
   }
@@ -204,9 +239,27 @@ export function validateProjectSnapshot(
         `Permit ${permit.id} requiredForTaskId ${permit.requiredForTaskId} not found`,
       );
     }
+    if (permit.expirationDate !== undefined) {
+      requireParseableInstant(
+        `Permit ${permit.id} expirationDate`,
+        permit.expirationDate,
+        errors,
+      );
+    }
+  }
+
+  for (const weather of snapshot.weather) {
+    if (weather.projectId !== projectId) {
+      errors.push(
+        `Weather ${weather.id} projectId ${weather.projectId} does not match project ${projectId}`,
+      );
+    }
+    requireParseableInstant(`Weather ${weather.id} timestamp`, weather.timestamp, errors);
+    requireChronology(`Weather ${weather.id}`, weather.startTime, weather.endTime, errors);
   }
 
   for (const item of snapshot.evidence) {
+    requireParseableInstant(`Evidence ${item.id} timestamp`, item.timestamp, errors);
     if (!entityExists(snapshot, item.relatedEntityType, item.relatedEntityId)) {
       errors.push(
         `Evidence ${item.id} references missing ${item.relatedEntityType}:${item.relatedEntityId}`,
@@ -214,26 +267,8 @@ export function validateProjectSnapshot(
     }
   }
 
-  if (snapshot.scenarioFixtures.length !== 5) {
-    errors.push(
-      `Exactly five scenario fixtures required, found ${snapshot.scenarioFixtures.length}`,
-    );
-  }
-
   const sequenceOrders = new Set<number>();
   for (const fixture of snapshot.scenarioFixtures) {
-    if (!APPROVED_FIXTURE_IDS.has(fixture.id)) {
-      errors.push(`Unauthorized scenario fixture id: ${fixture.id}`);
-    }
-    const expectedSignalType = APPROVED_FIXTURE_SIGNAL_TYPES[fixture.id];
-    if (
-      expectedSignalType !== undefined &&
-      fixture.signalType !== expectedSignalType
-    ) {
-      errors.push(
-        `Fixture ${fixture.id} signalType must be ${expectedSignalType}, got ${fixture.signalType}`,
-      );
-    }
     if (sequenceOrders.has(fixture.sequenceOrder)) {
       errors.push(`Duplicate scenario fixture sequenceOrder ${fixture.sequenceOrder}`);
     }
@@ -258,17 +293,51 @@ export function validateProjectSnapshot(
     }
   }
 
-  const disruptiveRain = snapshot.weather.some(
-    (w) =>
-      w.condition.toLowerCase().includes("rain") &&
-      w.severity !== "low" &&
-      w.id !== "wx-baseline-clear",
-  );
-  if (disruptiveRain) {
-    errors.push("Disruptive rain must not exist as baseline weather");
-  }
-
   return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Minimum IANA check using the runtime Intl API. No timezone package.
+ * Uses a fixed instant so validation never reads the system clock.
+ */
+export function isValidIanaTimeZone(timeZone: string): boolean {
+  if (!timeZone || timeZone.trim() !== timeZone) {
+    return false;
+  }
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone }).format(
+      new Date("2026-01-01T00:00:00.000Z"),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function requireParseableInstant(
+  label: string,
+  value: string,
+  errors: string[],
+): number | null {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) {
+    errors.push(`${label} is not a valid timestamp: ${value}`);
+    return null;
+  }
+  return ms;
+}
+
+function requireChronology(
+  label: string,
+  start: string,
+  end: string,
+  errors: string[],
+): void {
+  const startMs = requireParseableInstant(`${label} start`, start, errors);
+  const endMs = requireParseableInstant(`${label} end`, end, errors);
+  if (startMs !== null && endMs !== null && startMs > endMs) {
+    errors.push(`${label} start is after end`);
+  }
 }
 
 function entityExists(

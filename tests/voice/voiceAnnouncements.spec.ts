@@ -84,7 +84,12 @@ function resetVoiceStore() {
 
 function resetOperationalStores() {
   useAgentStore.getState().clearHistory();
-  useProjectStore.setState({ snapshot: null, isLoaded: false });
+  useProjectStore.setState({
+    snapshot: null,
+    isLoaded: false,
+    source: "demo",
+    operational: null,
+  });
   useReasoningStore.setState({
     isInitialized: false,
     runtime: useReasoningStore.getState().runtime,

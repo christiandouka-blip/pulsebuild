@@ -9,6 +9,7 @@ import {
   type SignalReasoning,
 } from "@/domain/engines/reasoningPipeline";
 import type { ProjectSnapshot } from "@/domain/types/snapshot";
+import { useProjectStore } from "@/store/useProjectStore";
 
 /**
  * Runtime reasoning state — Phase 3A.
@@ -21,7 +22,7 @@ type ReasoningStoreState = {
   isInitialized: boolean;
   runtime: ReasoningRuntime;
   canProcessNext: boolean;
-  initializeReasoning: () => void;
+  initializeReasoning: (snapshot?: ProjectSnapshot) => void;
   processNextObservation: () => void;
   resetReasoning: () => void;
   getReasoningBySignalId: (signalId: string) => SignalReasoning | undefined;
@@ -34,28 +35,45 @@ type ReasoningStoreState = {
  * tests — the cache is not Object.freeze'd.
  */
 let cachedSnapshot: ProjectSnapshot | null = null;
-function getSnapshot(): ProjectSnapshot {
-  if (cachedSnapshot === null) {
-    cachedSnapshot = getInitialProjectSnapshot();
+function getSnapshot(snapshot?: ProjectSnapshot): ProjectSnapshot {
+  if (snapshot) {
+    cachedSnapshot = snapshot;
+    return snapshot;
   }
+  const project = useProjectStore.getState();
+  if (project.source === "workspace") {
+    if (!project.snapshot) {
+      throw new Error("Workspace snapshot is not loaded.");
+    }
+    cachedSnapshot = project.snapshot;
+    return project.snapshot;
+  }
+  if (project.isLoaded && project.snapshot) {
+    cachedSnapshot = project.snapshot;
+    return project.snapshot;
+  }
+  cachedSnapshot = getInitialProjectSnapshot();
   return cachedSnapshot;
 }
 
-function computeCanProcessNext(runtime: ReasoningRuntime): boolean {
-  return nextFixtureId(getSnapshot(), runtime) !== null;
+function computeCanProcessNext(
+  runtime: ReasoningRuntime,
+  snapshot?: ProjectSnapshot,
+): boolean {
+  return nextFixtureId(getSnapshot(snapshot), runtime) !== null;
 }
 
 export const useReasoningStore = create<ReasoningStoreState>((set, get) => ({
   isInitialized: false,
   runtime: initialRuntime(),
   canProcessNext: true,
-  initializeReasoning: () => {
+  initializeReasoning: (snapshot?: ProjectSnapshot) => {
     if (get().isInitialized) return;
     const runtime = initialRuntime();
     set({
       isInitialized: true,
       runtime,
-      canProcessNext: computeCanProcessNext(runtime),
+      canProcessNext: computeCanProcessNext(runtime, snapshot),
     });
   },
   processNextObservation: () => {

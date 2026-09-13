@@ -23,5 +23,9 @@ export type ProjectSnapshot = {
   permits: Permit[];
   weather: WeatherEvent[];
   evidence: EvidenceItem[];
+  /**
+   * Demo/test observation fixtures only. Production snapshots MUST use [].
+   * Not persisted. Kept on the type so Harbor Point/Phase 3 tests stay compatible.
+   */
   scenarioFixtures: ScenarioFixture[];
 };

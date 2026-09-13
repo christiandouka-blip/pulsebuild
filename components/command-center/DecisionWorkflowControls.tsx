@@ -13,6 +13,10 @@ import {
   retryDecisionCommitted,
   verifyDecisionCommitted,
 } from "@/lib/orchestration/commandCenter";
+import type { FsmCommandEnvelope } from "@/domain/operations/types";
+import { publicOperationalMessage } from "@/domain/operations/publicErrors";
+import { commitWorkspaceDecision } from "@/lib/operations/commitClient";
+import { useProjectStore } from "@/store/useProjectStore";
 import {
   formatWorkflowError,
   latestAuditEvent,
@@ -49,8 +53,24 @@ export function DecisionWorkflowControls({
 
   const handle = (
     run: () => DecisionActionResult,
+    production: readonly FsmCommandEnvelope[],
     onSuccess?: () => void,
   ) => {
+    if (useProjectStore.getState().source === "workspace") {
+      void (async () => {
+        const result = await commitWorkspaceDecision({
+          decisionId: decision.id,
+          commands: production,
+        });
+        if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
+          setError(publicOperationalMessage(result.status));
+          return;
+        }
+        setError(null);
+        onSuccess?.();
+      })();
+      return;
+    }
     const result = run();
     if (!result.ok) {
       setError(formatWorkflowError(result.error.code, result.error.message));
@@ -115,7 +135,12 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="primary"
                 size="sm"
-                onClick={() => handle(() => executeDecisionCommitted(decision.id))}
+                onClick={() =>
+                  handle(() => executeDecisionCommitted(decision.id), [
+                    { type: "MarkExecutionComplete" },
+                    { type: "AdvanceToVerification" },
+                  ])
+                }
                 title="Record that the approved field action was carried out"
               >
                 Mark Executed
@@ -128,7 +153,9 @@ export function DecisionWorkflowControls({
                 variant="secondary"
                 size="sm"
                 onClick={() =>
-                  handle(() => advanceToVerificationCommitted(decision.id))
+                  handle(() => advanceToVerificationCommitted(decision.id), [
+                    { type: "AdvanceToVerification" },
+                  ])
                 }
                 title="Send the recorded execution to manual verification"
               >
@@ -141,7 +168,11 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => handle(() => retryDecisionCommitted(decision.id))}
+                onClick={() =>
+                  handle(() => retryDecisionCommitted(decision.id), [
+                    { type: "RetryExecution" },
+                  ])
+                }
                 title="Return this decision to pending execution with the same approved action"
               >
                 Retry Execution
@@ -153,7 +184,11 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => handle(() => cancelDecisionCommitted(decision.id))}
+                onClick={() =>
+                  handle(() => cancelDecisionCommitted(decision.id), [
+                    { type: "CancelDecision" },
+                  ])
+                }
                 title="Cancel this approved decision without executing it"
               >
                 Cancel
@@ -191,6 +226,12 @@ export function DecisionWorkflowControls({
                       blockDecisionCommitted(decision.id, {
                         reason: blockReason.trim(),
                       }),
+                    [
+                      {
+                        type: "BlockExecution",
+                        reason: blockReason.trim(),
+                      },
+                    ],
                     () => setBlockReason(""),
                   )
                 }
@@ -240,7 +281,11 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="primary"
                 size="sm"
-                onClick={() => handle(() => verifyDecisionCommitted(decision.id))}
+                onClick={() =>
+                  handle(() => verifyDecisionCommitted(decision.id), [
+                    { type: "VerifyDecision" },
+                  ])
+                }
                 title="Confirm the recorded action was completed as intended"
               >
                 Verify
@@ -252,7 +297,11 @@ export function DecisionWorkflowControls({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => handle(() => retryDecisionCommitted(decision.id))}
+                onClick={() =>
+                  handle(() => retryDecisionCommitted(decision.id), [
+                    { type: "RetryExecution" },
+                  ])
+                }
                 title="Return this decision to pending execution with the same approved action"
               >
                 Retry Execution
@@ -290,6 +339,12 @@ export function DecisionWorkflowControls({
                       failVerificationCommitted(decision.id, {
                         reason: failReason.trim(),
                       }),
+                    [
+                      {
+                        type: "FailVerification",
+                        reason: failReason.trim(),
+                      },
+                    ],
                     () => setFailReason(""),
                   )
                 }

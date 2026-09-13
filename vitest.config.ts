@@ -2,19 +2,40 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
+const alias = {
+  "@": fileURLToPath(new URL("./", import.meta.url)),
+};
+
 /**
- * Vitest config for deterministic engine unit tests only (Phase 3A).
- * The "@/" alias mirrors tsconfig paths. No jsdom or DOM environment: engines
- * are pure and run in the default node environment.
+ * Unit tests stay fast and isolated from PostgreSQL.
+ * Live integration tests use a longer timeout and never share the memory backend.
  */
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./", import.meta.url)),
-    },
-  },
+  resolve: { alias },
   test: {
-    include: ["tests/**/*.spec.ts"],
     environment: "node",
+    projects: [
+      {
+        resolve: { alias },
+        test: {
+          name: "unit",
+          include: ["tests/**/*.spec.ts"],
+          exclude: ["tests/integration/**"],
+          environment: "node",
+          testTimeout: 5_000,
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "live",
+          include: ["tests/integration/**/*.spec.ts"],
+          environment: "node",
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+          fileParallelism: false,
+        },
+      },
+    ],
   },
 });

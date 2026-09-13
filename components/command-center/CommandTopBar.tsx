@@ -1,4 +1,5 @@
 import { RotateCcw, StepForward } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/layout/Badge";
 import { Button } from "@/components/layout/Button";
@@ -11,6 +12,7 @@ type CommandTopBarProps = {
   canProcessNext: boolean;
   onProcessNext: () => void;
   onReset: () => void;
+  workspaceMode?: boolean;
 };
 
 /**
@@ -25,6 +27,7 @@ export function CommandTopBar({
   canProcessNext,
   onProcessNext,
   onReset,
+  workspaceMode = false,
 }: CommandTopBarProps) {
   return (
     <header className="border-b border-surface-border bg-surface-elevated/60 px-4 py-4 md:px-6">
@@ -72,11 +75,21 @@ export function CommandTopBar({
           </Button>
         </div>
       </div>
-      <p className="mt-3 text-xs text-muted-text">
-        Manual observation playback for a controlled demonstration. Each activation
-        processes one approved scenario fixture in order and advances simulated
-        workflow time by 15 minutes. This is not production simulation execution.
-      </p>
+      {!workspaceMode ? (
+        <p className="mt-3 text-xs text-muted-text">
+          Manual observation playback for a controlled demonstration. Each activation
+          processes one approved scenario fixture in order and advances simulated
+          workflow time by 15 minutes. This is not production simulation execution.
+        </p>
+      ) : (
+        <p className="mt-3 text-xs text-muted-text">
+          Production workspace. Operational time is the server-provided instant for
+          this project.{" "}
+          <Link className="text-signal-cyan underline" href="/projects">
+            Switch project
+          </Link>
+        </p>
+      )}
     </header>
   );
 }

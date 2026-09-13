@@ -14,9 +14,15 @@ import {
   type SimulatedClock,
 } from "@/lib/orchestration/simulatedClock";
 
+export type WorkflowTimeAuthority = "simulated" | "operational";
+
 type SimulatedClockStoreState = {
   clock: SimulatedClock | null;
-  initializeClock: (baselineSimulatedAt: string) => void;
+  timeAuthority: WorkflowTimeAuthority;
+  initializeClock: (
+    baselineSimulatedAt: string,
+    timeAuthority?: WorkflowTimeAuthority,
+  ) => void;
   resetClock: () => void;
   /** Peek the instant a successful action would use. Does not advance. */
   peekNext: () => string | null;
@@ -27,9 +33,13 @@ type SimulatedClockStoreState = {
 
 export const useSimulatedClockStore = create<SimulatedClockStoreState>((set, get) => ({
   clock: null,
+  timeAuthority: "simulated",
 
-  initializeClock: (baselineSimulatedAt) => {
-    set({ clock: initialSimulatedClock(baselineSimulatedAt) });
+  initializeClock: (baselineSimulatedAt, timeAuthority = "simulated") => {
+    set({
+      clock: initialSimulatedClock(baselineSimulatedAt),
+      timeAuthority,
+    });
   },
 
   resetClock: () => {
@@ -40,13 +50,20 @@ export const useSimulatedClockStore = create<SimulatedClockStoreState>((set, get
 
   peekNext: () => {
     const clock = get().clock;
-    return clock ? peekNextSimulatedAt(clock) : null;
+    if (!clock) return null;
+    if (get().timeAuthority === "operational") {
+      return currentSimulatedAt(clock);
+    }
+    return peekNextSimulatedAt(clock);
   },
 
   commitStep: () => {
     const clock = get().clock;
     if (!clock) {
       throw new Error("Simulated clock is not initialized.");
+    }
+    if (get().timeAuthority === "operational") {
+      return currentSimulatedAt(clock);
     }
     const next = commitWorkflowStep(clock);
     set({ clock: next });

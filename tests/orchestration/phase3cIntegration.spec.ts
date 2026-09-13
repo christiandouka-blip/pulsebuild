@@ -27,7 +27,12 @@ import { useSimulatedClockStore } from "@/store/useSimulatedClockStore";
 import { useUIStore } from "@/store/useUIStore";
 
 function resetAllStores(): void {
-  useProjectStore.setState({ snapshot: null, isLoaded: false });
+  useProjectStore.setState({
+    snapshot: null,
+    isLoaded: false,
+    source: "demo",
+    operational: null,
+  });
   useReasoningStore.setState({
     isInitialized: false,
     runtime: useReasoningStore.getState().runtime,
@@ -38,7 +43,7 @@ function resetAllStores(): void {
   useDecisionStore.getState().resetDecisions();
   useOverlayStore.setState({ runtime: null });
   useRecoveryStore.setState({ runtime: null });
-  useSimulatedClockStore.setState({ clock: null });
+  useSimulatedClockStore.setState({ clock: null, timeAuthority: "simulated" });
   useUIStore.getState().closeSignal();
 }
 

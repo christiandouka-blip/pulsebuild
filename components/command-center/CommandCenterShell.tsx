@@ -7,6 +7,7 @@ import { CommandTopBar } from "@/components/command-center/CommandTopBar";
 import { DecisionReviewQueue } from "@/components/command-center/DecisionReviewQueue";
 import { HealthStrip } from "@/components/command-center/HealthStrip";
 import { LiveSignalFeedShell } from "@/components/command-center/LiveSignalFeedShell";
+import { ObservationSubmitPanel } from "@/components/command-center/ObservationSubmitPanel";
 import { TimelinePanelShell } from "@/components/timeline/TimelinePanelShell";
 import {
   formatSimulatedInstant,
@@ -20,10 +21,13 @@ import {
 } from "@/lib/selectors/recoveryPresentationSelectors";
 import {
   ensureCommandCenterInitialized,
+  hydrateWorkspaceSnapshot,
   processNextObservationCommitted,
   resetCommandCenter,
 } from "@/lib/orchestration/commandCenter";
 import { currentSimulatedAt } from "@/lib/orchestration/simulatedClock";
+import type { ReconstructedOperationalState } from "@/domain/operations/types";
+import type { ProjectSnapshot } from "@/domain/types/snapshot";
 import { useDecisionStore } from "@/store/useDecisionStore";
 import { useOverlayStore } from "@/store/useOverlayStore";
 import { useProjectStore } from "@/store/useProjectStore";
@@ -38,11 +42,18 @@ import { useUIStore } from "@/store/useUIStore";
  * through the application orchestration layer — stores do not import each other
  * circularly.
  */
-export function CommandCenterShell() {
+export function CommandCenterShell({
+  workspaceSnapshot,
+  workspaceOperational,
+}: {
+  workspaceSnapshot?: ProjectSnapshot;
+  workspaceOperational?: ReconstructedOperationalState;
+} = {}) {
   const activeMobilePanel = useUIStore((state) => state.activeMobilePanel);
   const showChatExpanded = activeMobilePanel === "chat";
   const snapshot = useProjectStore((state) => state.snapshot);
   const isLoaded = useProjectStore((state) => state.isLoaded);
+  const source = useProjectStore((state) => state.source);
   const loadSeedProject = useProjectStore((state) => state.loadSeedProject);
 
   const isInitialized = useReasoningStore((state) => state.isInitialized);
@@ -56,8 +67,25 @@ export function CommandCenterShell() {
   const [chatComposerEpoch, setChatComposerEpoch] = useState(0);
 
   useEffect(() => {
+    if (workspaceSnapshot) {
+      if (
+        !isLoaded ||
+        source !== "workspace" ||
+        snapshot?.project.id !== workspaceSnapshot.project.id
+      ) {
+        hydrateWorkspaceSnapshot(workspaceSnapshot, workspaceOperational);
+      }
+      return;
+    }
     if (!isLoaded) loadSeedProject();
-  }, [isLoaded, loadSeedProject]);
+  }, [
+    workspaceSnapshot,
+    workspaceOperational,
+    isLoaded,
+    loadSeedProject,
+    source,
+    snapshot?.project.id,
+  ]);
 
   useEffect(() => {
     if (isLoaded) ensureCommandCenterInitialized();
@@ -118,6 +146,7 @@ export function CommandCenterShell() {
         canProcessNext={canProcessNext}
         onProcessNext={handleProcessNext}
         onReset={handleReset}
+        workspaceMode={Boolean(workspaceSnapshot) || source === "workspace"}
       />
 
       <div className="space-y-4 px-4 py-4 md:px-6 md:py-6">
@@ -140,6 +169,10 @@ export function CommandCenterShell() {
             </p>
           ) : null}
         </div>
+
+        {Boolean(workspaceSnapshot) || source === "workspace" ? (
+          <ObservationSubmitPanel />
+        ) : null}
 
         <div className="space-y-4 md:hidden">
           {!showChatExpanded ? (

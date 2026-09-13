@@ -11,6 +11,7 @@
 
 import type { DecisionActionResult } from "@/store/useDecisionStore";
 import type { SelectedActionSource } from "@/domain/decisions/types";
+import type { ReconstructedOperationalState } from "@/domain/operations/types";
 import type { ProjectSnapshot } from "@/domain/types/snapshot";
 import {
   initializePhase3cRuntimes,
@@ -33,8 +34,12 @@ export type ProcessNextResult =
   | { ok: false; code: "NO_NEXT_OBSERVATION" };
 
 function requireSnapshot(): ProjectSnapshot {
-  if (!useProjectStore.getState().isLoaded) {
-    useProjectStore.getState().loadSeedProject();
+  const projectState = useProjectStore.getState();
+  if (!projectState.isLoaded) {
+    if (projectState.source === "workspace") {
+      throw new Error("Workspace snapshot is not loaded.");
+    }
+    projectState.loadSeedProject();
   }
   const snapshot = useProjectStore.getState().snapshot;
   if (!snapshot) {
@@ -43,10 +48,58 @@ function requireSnapshot(): ProjectSnapshot {
   return snapshot;
 }
 
+function workflowTimeAuthority(): "simulated" | "operational" {
+  return useProjectStore.getState().source === "workspace"
+    ? "operational"
+    : "simulated";
+}
+
+export function hydrateWorkspaceSnapshot(
+  snapshot: ProjectSnapshot,
+  operational?: ReconstructedOperationalState,
+): void {
+  useProjectStore.getState().loadWorkspaceSnapshot(snapshot, operational ?? null);
+  useUIStore.getState().closeSignal();
+  useAgentStore.getState().clearHistory();
+  useVoiceStore.getState().cancelSpeech();
+  useVoiceStore.getState().clearSession();
+  if (operational) {
+    applyReconstructedOperational(snapshot, operational);
+    return;
+  }
+  useReasoningStore.getState().resetReasoning();
+  useReasoningStore.setState({ isInitialized: false });
+  useDecisionStore.getState().resetDecisions();
+  resetPhase3cRuntimes(snapshot);
+  useSimulatedClockStore
+    .getState()
+    .initializeClock(snapshot.project.currentSimulatedAt, "operational");
+  ensureCommandCenterInitialized();
+}
+
+export function applyReconstructedOperational(
+  snapshot: ProjectSnapshot,
+  operational: ReconstructedOperationalState,
+): void {
+  useReasoningStore.setState({ isInitialized: false });
+  useReasoningStore.getState().initializeReasoning(snapshot);
+  useReasoningStore.setState({
+    isInitialized: true,
+    runtime: operational.reasoning,
+    canProcessNext: false,
+  });
+  useDecisionStore.setState({ runtime: operational.decisions });
+  useOverlayStore.setState({ runtime: operational.overlay });
+  useRecoveryStore.setState({ runtime: operational.recovery });
+  useSimulatedClockStore
+    .getState()
+    .initializeClock(snapshot.project.currentSimulatedAt, "operational");
+}
+
 export function ensureCommandCenterInitialized(): ProjectSnapshot {
   const snapshot = requireSnapshot();
   if (!useReasoningStore.getState().isInitialized) {
-    useReasoningStore.getState().initializeReasoning();
+    useReasoningStore.getState().initializeReasoning(snapshot);
   }
   if (useOverlayStore.getState().runtime === null) {
     initializePhase3cRuntimes(snapshot);
@@ -57,7 +110,10 @@ export function ensureCommandCenterInitialized(): ProjectSnapshot {
   if (useSimulatedClockStore.getState().clock === null) {
     useSimulatedClockStore
       .getState()
-      .initializeClock(snapshot.project.currentSimulatedAt);
+      .initializeClock(
+        snapshot.project.currentSimulatedAt,
+        workflowTimeAuthority(),
+      );
   }
   return snapshot;
 }
@@ -90,6 +146,15 @@ export function processNextObservationCommitted(): ProcessNextResult {
 }
 
 export function resetCommandCenter(): void {
+  const project = useProjectStore.getState();
+  if (project.source === "workspace" && project.snapshot && project.operational) {
+    applyReconstructedOperational(project.snapshot, project.operational);
+    useUIStore.getState().closeSignal();
+    useAgentStore.getState().clearHistory();
+    useVoiceStore.getState().cancelSpeech();
+    useVoiceStore.getState().clearSession();
+    return;
+  }
   const snapshot = requireSnapshot();
   useReasoningStore.getState().resetReasoning();
   useDecisionStore.getState().resetDecisions();
@@ -97,7 +162,10 @@ export function resetCommandCenter(): void {
   if (useSimulatedClockStore.getState().clock === null) {
     useSimulatedClockStore
       .getState()
-      .initializeClock(snapshot.project.currentSimulatedAt);
+      .initializeClock(
+        snapshot.project.currentSimulatedAt,
+        workflowTimeAuthority(),
+      );
   } else {
     useSimulatedClockStore.getState().resetClock();
   }

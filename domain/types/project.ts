@@ -12,8 +12,16 @@ export type Project = {
   startDate: string;
   targetDate: string;
   status: ProjectStatus;
-  timezone: "America/New_York";
-  /** Canonical simulated start instant — 2026-03-14T06:30:00-04:00 */
+  /** IANA timezone for presentation. Harbor Point remains America/New_York. */
+  timezone: string;
+  /**
+   * Transitional operational instant on the snapshot.
+   *
+   * Demo/test: deterministic 15-minute simulated clock value.
+   * Production: explicit current operational instant from the application
+   * TimeProvider. Not persisted in PostgreSQL. Do not read the system clock
+   * inside mapping or engines. Field name retained for frozen Phase 3 compatibility.
+   */
   currentSimulatedAt: string;
 };
 

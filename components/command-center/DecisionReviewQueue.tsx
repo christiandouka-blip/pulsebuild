@@ -33,6 +33,9 @@ import {
   approveDecisionCommitted,
   rejectDecisionCommitted,
 } from "@/lib/orchestration/commandCenter";
+import { commitWorkspaceDecision } from "@/lib/operations/commitClient";
+import { publicOperationalMessage } from "@/domain/operations/publicErrors";
+import { useProjectStore } from "@/store/useProjectStore";
 
 type DecisionReviewQueueProps = {
   reasonings: SignalReasoning[];
@@ -113,9 +116,28 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
 
   const evidencePreview = item.recommendation.evidence.slice(0, 3);
 
-  function onApprove() {
+  async function onApprove() {
     if (!decision || !selectedFact) {
       setError("Action no longer available: selected action could not be resolved.");
+      return;
+    }
+    if (useProjectStore.getState().source === "workspace") {
+      const result = await commitWorkspaceDecision({
+        decisionId: decision.id,
+        commands: [
+          {
+            type: "ApproveDecision",
+            selectedActionSource: selection.source,
+            alternativeIndex: selection.alternativeIndex,
+          },
+          { type: "ProceedAfterApproval" },
+        ],
+      });
+      if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
+        setError(publicOperationalMessage(result.status));
+        return;
+      }
+      setError(null);
       return;
     }
     const result = approveDecisionCommitted(decision.id, {
@@ -129,10 +151,23 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
     setError(null);
   }
 
-  function onReject() {
+  async function onReject() {
     if (!decision) return;
     if (!rejectReason.trim()) {
       setError("Rejection reason required: enter a reason before rejecting.");
+      return;
+    }
+    if (useProjectStore.getState().source === "workspace") {
+      const result = await commitWorkspaceDecision({
+        decisionId: decision.id,
+        commands: [{ type: "RejectDecision", reason: rejectReason.trim() }],
+      });
+      if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
+        setError(publicOperationalMessage(result.status));
+        return;
+      }
+      setError(null);
+      setRejectReason("");
       return;
     }
     const result = rejectDecisionCommitted(decision.id, {
@@ -146,8 +181,20 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
     setRejectReason("");
   }
 
-  function onAcknowledge() {
+  async function onAcknowledge() {
     if (!decision) return;
+    if (useProjectStore.getState().source === "workspace") {
+      const result = await commitWorkspaceDecision({
+        decisionId: decision.id,
+        commands: [{ type: "AcknowledgeDecision" }],
+      });
+      if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
+        setError(publicOperationalMessage(result.status));
+        return;
+      }
+      setError(null);
+      return;
+    }
     const result = acknowledgeDecisionCommitted(decision.id);
     if (!result.ok) {
       setError(formatDecisionError(result.error.code, result.error.message));

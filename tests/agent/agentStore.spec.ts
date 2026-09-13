@@ -76,7 +76,12 @@ function recoveredAskContext() {
 
 function resetStores() {
   useAgentStore.getState().clearHistory();
-  useProjectStore.setState({ snapshot: null, isLoaded: false });
+  useProjectStore.setState({
+    snapshot: null,
+    isLoaded: false,
+    source: "demo",
+    operational: null,
+  });
   useReasoningStore.getState().resetReasoning();
   useReasoningStore.setState({ isInitialized: false });
   useDecisionStore.getState().resetDecisions();
