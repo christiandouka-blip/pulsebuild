@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck } from "lucide-react";
+import { Check, ClipboardCheck } from "lucide-react";
 
 import { PriorityBadge } from "@/components/cards/PriorityBadge";
 import { DecisionStatusBadge } from "@/components/command-center/DecisionStatusBadge";
@@ -105,6 +105,8 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
   });
   const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [acknowledging, setAcknowledging] = useState(false);
+  const [ackSuccess, setAckSuccess] = useState(false);
 
   const decision = item.decision;
   const facts = item.proposalFacts;
@@ -182,25 +184,33 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
   }
 
   async function onAcknowledge() {
-    if (!decision) return;
-    if (useProjectStore.getState().source === "workspace") {
-      const result = await commitWorkspaceDecision({
-        decisionId: decision.id,
-        commands: [{ type: "AcknowledgeDecision" }],
-      });
-      if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
-        setError(publicOperationalMessage(result.status));
+    if (!decision || acknowledging) return;
+    setError(null);
+    setAcknowledging(true);
+    try {
+      if (useProjectStore.getState().source === "workspace") {
+        const result = await commitWorkspaceDecision({
+          decisionId: decision.id,
+          commands: [{ type: "AcknowledgeDecision" }],
+        });
+        if (result.status !== "Committed" && result.status !== "AlreadyCommitted") {
+          setError(publicOperationalMessage(result.status));
+          return;
+        }
+        setError(null);
+        setAckSuccess(true);
+        return;
+      }
+      const result = acknowledgeDecisionCommitted(decision.id);
+      if (!result.ok) {
+        setError(formatDecisionError(result.error.code, result.error.message));
         return;
       }
       setError(null);
-      return;
+      setAckSuccess(true);
+    } finally {
+      setAcknowledging(false);
     }
-    const result = acknowledgeDecisionCommitted(decision.id);
-    if (!result.ok) {
-      setError(formatDecisionError(result.error.code, result.error.message));
-      return;
-    }
-    setError(null);
   }
 
   return (
@@ -401,11 +411,23 @@ function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
             variant="primary"
             size="sm"
             onClick={onAcknowledge}
+            disabled={acknowledging}
+            aria-busy={acknowledging}
             title="Acknowledge this informational recommendation"
           >
-            Acknowledge
+            {acknowledging ? "Acknowledging..." : "Acknowledge"}
           </Button>
         </div>
+      ) : null}
+
+      {ackSuccess ? (
+        <p
+          className="mt-3 flex items-center gap-1.5 text-xs text-build-green"
+          role="status"
+        >
+          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          Decision acknowledged successfully
+        </p>
       ) : null}
 
       {error ? (
