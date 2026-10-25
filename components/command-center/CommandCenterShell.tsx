@@ -171,7 +171,10 @@ export function CommandCenterShell({
         </div>
 
         {Boolean(workspaceSnapshot) || source === "workspace" ? (
-          <ObservationSubmitPanel />
+          <>
+            <ProjectEntitiesPanel snapshot={snapshot} />
+            <ObservationSubmitPanel />
+          </>
         ) : null}
 
         <div className="space-y-4 md:hidden">
@@ -210,5 +213,82 @@ export function CommandCenterShell({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Read-only reference panel: lists imported materials and tasks with their
+ * persisted IDs from the already-loaded workspace snapshot. No queries, no
+ * mutation controls — identifier visibility only.
+ */
+function ProjectEntitiesPanel({
+  snapshot,
+}: {
+  snapshot?: ProjectSnapshot | null;
+}) {
+  if (!snapshot) {
+    return (
+      <div className="rounded-md border border-surface-border bg-surface-card px-4 py-4 text-sm text-muted-text">
+        Project entities are unavailable until the snapshot loads.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-surface-border bg-surface-card px-4 py-4">
+      <h2 className="text-sm font-semibold text-slate-100">Project entities</h2>
+      <p className="mt-1 text-xs text-muted-text">
+        Read-only reference of persisted identifiers for this project.
+      </p>
+      <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <EntityIdList
+          title="Materials"
+          items={snapshot.materials.map((item) => ({
+            id: item.id,
+            name: item.name,
+          }))}
+        />
+        <EntityIdList
+          title="Tasks"
+          items={snapshot.tasks.map((item) => ({
+            id: item.id,
+            name: item.name,
+          }))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EntityIdList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ id: string; name: string }>;
+}) {
+  return (
+    <section>
+      <h3 className="text-xs font-medium uppercase tracking-[0.12em] text-signal-cyan">
+        {title}
+      </h3>
+      {items.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-text">None in this project.</p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-2">
+          {items.map((item) => (
+            <li
+              key={item.id}
+              className="rounded-md border border-surface-border bg-surface-elevated px-3 py-2"
+            >
+              <span className="block text-sm text-slate-100">{item.name}</span>
+              <span className="mt-0.5 block break-all font-data text-xs text-muted-text">
+                {item.id}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
